@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>실시간 레이트레이싱 회전하는 삼각형</title>
+    <!-- Tailwind CSS 사용 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons 사용 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #0d0f14;
+            color: #f3f4f6;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            overflow-x: hidden;
+        }
+        canvas {
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- 왼쪽: 컨트롤 패널 -->
+    <div class="w-full lg:w-96 bg-gray-900 border-b lg:border-b-0 lg:border-r border-gray-800 p-6 flex flex-col justify-between shrink-0">
+        <div>
+            <!-- 헤더 -->
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-500/20">
+                    <i data-lucide="triangle" class="w-6 h-6 animate-pulse"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-white">GPU 레이트레이싱</h1>
+                    <p class="text-xs text-indigo-400 font-medium">돌아가는 3D 삼각형 시뮬레이터</p>
+                </div>
+            </div>
+
+            <p class="text-xs text-gray-400 mb-6 leading-relaxed">
+                WebGL 2.0 프래그먼트 셰이더 기반의 실시간 GPU 레이트레이서입니다. 
+                <strong>Möller-Trumbore 알고리즘</strong>을 사용하여 광선과 삼각형의 충돌을 실시간으로 계산합니다.
+            </p>
+
+            <hr class="border-gray-800 mb-6" />
+
+            <!-- 설정 그룹 -->
+            <div class="space-y-6">
+                <!-- 애니메이션 속도 -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                            <i data-lucide="gauge" class="w-4 h-4 text-indigo-400"></i> 회전 속도
+                        </label>
+                        <span id="speed-val" class="text-sm font-mono text-indigo-300">1.0x</span>
+                    </div>
+                    <input type="range" id="speed" min="0" max="3" step="0.1" value="1.0" 
+                           class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                </div>
+
+                <!-- 삼각형 색상 -->
+                <div>
+                    <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-2">
+                        <i data-lucide="palette" class="w-4 h-4 text-indigo-400"></i> 삼각형 색상
+                    </label>
+                    <div class="grid grid-cols-5 gap-2">
+                        <button onclick="setTriangleColor('#f43f5e')" class="h-8 rounded-lg bg-rose-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-rose"></button>
+                        <button onclick="setTriangleColor('#10b981')" class="h-8 rounded-lg bg-emerald-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-emerald"></button>
+                        <button onclick="setTriangleColor('#3b82f6')" class="h-8 rounded-lg bg-blue-500 border-2 border-white transition-all focus:outline-none hover:scale-105" id="color-blue"></button>
+                        <button onclick="setTriangleColor('#eab308')" class="h-8 rounded-lg bg-yellow-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-yellow"></button>
+                        <button onclick="setTriangleColor('#a855f7')" class="h-8 rounded-lg bg-purple-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-purple"></button>
+                    </div>
+                </div>
+
+                <!-- 빛 위치 제어 -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+                            <i data-lucide="sun" class="w-4 h-4 text-indigo-400"></i> 광원 회전 속도
+                        </label>
+                        <span id="light-speed-val" class="text-sm font-mono text-indigo-300">0.5x</span>
+                    </div>
+                    <input type="range" id="light-speed" min="0" max="2" step="0.1" value="0.5" 
+                           class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                </div>
+
+                <!-- 그래픽 스위치 토글 -->
+                <div class="space-y-3 bg-gray-950 p-4 rounded-xl border border-gray-800">
+                    <!-- 그림자 비활성화 -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                            <i data-lucide="moon" class="w-3.5 h-3.5 text-indigo-400"></i> 하드 섀도우 (그림자)
+                        </span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="shadow-toggle" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                    <!-- 바닥 반사 -->
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                            <i data-lucide="layers" class="w-3.5 h-3.5 text-indigo-400"></i> 바닥 반사 (Reflection)
+                        </span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="reflection-toggle" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 하단: 조작 정보 -->
+        <div class="mt-8 border-t border-gray-800 pt-6">
+            <div class="bg-indigo-950/40 border border-indigo-900/50 p-4 rounded-xl">
+                <h4 class="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1.5">
+                    <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> 카메라 회전 조작법
+                </h4>
+                <p class="text-[11px] text-gray-400 leading-relaxed">
+                    렌더링 화면을 <strong>클릭 후 드래그</strong>하면 카메라 각도를 조절할 수 있습니다. 마우스 휠을 통해 줌인/아웃이 가능합니다.
+                </p>
+            </div>
+            <p class="text-[10px] text-gray-600 mt-4 text-center">© 2026 WebGL Raytracer Simulation</p>
+        </div>
+    </div>
+
+    <!-- 오른쪽: 메인 캔버스 영역 -->
+    <div class="flex-1 flex flex-col relative bg-black select-none overflow-hidden">
+        <!-- 상단 내비 바 -->
+        <div class="absolute top-0 left-0 right-0 z-10 px-6 py-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between pointer-events-none">
+            <div class="flex items-center gap-2">
+                <span class="flex h-2 w-2 relative">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span class="text-xs font-mono tracking-wider uppercase text-gray-300">GPU ACTIVE (60FPS)</span>
+            </div>
+            <div id="render-time" class="text-xs font-mono text-indigo-400 pointer-events-auto bg-gray-900/80 px-3 py-1.5 rounded-lg border border-gray-800">
+                Resolution: 100%
+            </div>
+        </div>
+
+        <!-- 캔버스 컨테이너 -->
+        <div class="w-full h-full flex items-center justify-center relative flex-1 min-h-[400px]">
+            <canvas id="raytrace-canvas" class="w-full h-full object-cover cursor-grab active:cursor-grabbing"></canvas>
+        </div>
+    </div>
+
+    <!-- WebGL2 셰이더 및 로직 구현 JS -->
+    <script>
+        // Lucide 아이콘 초기화
+        lucide.createIcons();
+
+        // DOM 요소 획득
+        const canvas = document.getElementById('raytrace-canvas');
+        const speedInput = document.getElementById('speed');
+        const speedVal = document.getElementById('speed-val');
+        const lightSpeedInput = document.getElementById('light-speed');
+        const lightSpeedVal = document.getElementById('light-speed-val');
+        const shadowToggle = document.getElementById('shadow-toggle');
+        const reflectionToggle = document.getElementById('reflection-toggle');
+        const renderTimeEl = document.getElementById('render-time');
+
+        // 상태 변수
+        let triangleColor = [0.23, 0.51, 0.96]; // #3b82f6 기본 파란색 (RGB [0,1])
+        let rotationSpeed = 1.0;
+        let lightSpeed = 0.5;
+        let useShadows = 1.0;
+        let useReflection = 1.0;
+
+        // 카메라 조작 상태
+        let cameraAngleX = 0.3; // 라디안
+        let cameraAngleY = 0.5; // 라디안
+        let cameraDistance = 5.0;
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+
+        // 색상 선택용 헬퍼 함수
+        function setTriangleColor(hex) {
+            // 버튼 테두리 리셋 및 설정
+            ['rose', 'emerald', 'blue', 'yellow', 'purple'].forEach(col => {
+                const btn = document.getElementById(`color-${col}`);
+                if (btn) btn.classList.remove('border-white');
+                if (btn) btn.classList.add('border-transparent');
+            });
+
+            // 매칭되는 색상 찾아서 보더 강조
+            let targetColorId = 'color-blue';
+            if (hex === '#f43f5e') { triangleColor = [0.95, 0.24, 0.37]; targetColorId = 'color-rose'; }
+            else if (hex === '#10b981') { triangleColor = [0.06, 0.72, 0.50]; targetColorId = 'color-emerald'; }
+            else if (hex === '#3b82f6') { triangleColor = [0.23, 0.51, 0.96]; targetColorId = 'color-blue'; }
+            else if (hex === '#eab308') { triangleColor = [0.91, 0.70, 0.03]; targetColorId = 'color-yellow'; }
+            else if (hex === '#a855f7') { triangleColor = [0.65, 0.33, 0.96]; targetColorId = 'color-purple'; }
+
+            const activeBtn = document.getElementById(targetColorId);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-transparent');
+                activeBtn.classList.add('border-white');
+            }
+        }
+
+        // 제어 이벤트 리스너들
+        speedInput.addEventListener('input', (e) => {
+            rotationSpeed = parseFloat(e.target.value);
+            speedVal.innerText = rotationSpeed.toFixed(1) + 'x';
+        });
+
+        lightSpeedInput.addEventListener('input', (e) => {
+            lightSpeed = parseFloat(e.target.value);
+            lightSpeedVal.innerText = lightSpeed.toFixed(1) + 'x';
+        });
+
+        shadowToggle.addEventListener('change', (e) => {
+            useShadows = e.target.checked ? 1.0 : 0.0;
+        });
+
+        reflectionToggle.addEventListener('change', (e) => {
+            useReflection = e.target.checked ? 1.0 : 0.0;
+        });
+
+        // 캔버스 드래그 카메라 제어
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - previousMousePosition.x;
+            const deltaY = e.clientY - previousMousePosition.y;
+
+            cameraAngleY += deltaX * 0.007;
+            cameraAngleX += deltaY * 0.007;
+
+            // X축 회전 제한 (짐벌락 방지)
+            cameraAngleX = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, cameraAngleX));
+
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+
+        // 마우스 휠을 통한 줌인 줌아웃
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            cameraDistance += e.deltaY * 0.005;
+            cameraDistance = Math.max(2.0, Math.min(10.0, cameraDistance));
+        }, { passive: false });
+
+        // 터치 제어 지원
+        canvas.addEventListener('touchstart', (e) => {
+            if(e.touches.length === 1) {
+                isDragging = true;
+                previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            const deltaX = e.touches[0].clientX - previousMousePosition.x;
+            const deltaY = e.touches[0].clientY - previousMousePosition.y;
+
+            cameraAngleY += deltaX * 0.01;
+            cameraAngleX += deltaY * 0.01;
+
+            cameraAngleX = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, cameraAngleX));
+
+            previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: true });
+
+
+        // ==========================================
+        //  WebGL2 레이트레이싱 메인 렌더링 파이프라인
+        // ==========================================
+
+        const gl = canvas.getContext('webgl2');
+        if (!gl) {
+            alert('이 브라우저는 WebGL 2.0을 지원하지 않습니다.');
+        }
+
+        // 화면 비율 맞추기
+        function resizeCanvas() {
+            const displayWidth  = Math.floor(canvas.clientWidth * window.devicePixelRatio);
+            const displayHeight = Math.floor(canvas.clientHeight * window.devicePixelRatio);
+
+            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+                canvas.width  = displayWidth;
+                canvas.height = displayHeight;
+                gl.viewport(0, 0, canvas.width, canvas.height);
+                renderTimeEl.innerText = `Res: ${canvas.width}x${canvas.height}`;
+            }
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 1. Vertex Shader (전체 화면 사각형을 그리기 위함)
+        const vsSource = `#version 300 es
+        in vec2 position;
+        out vec2 v_uv;
+        void main() {
+            v_uv = position * 0.5 + 0.5;
+            gl_Position = vec4(position, 0.0, 1.0);
+        }`;
+
+        // 2. Fragment Shader (실시간 레이트레이서 탑재)
+        const fsSource = `#version 300 es
+        precision highp float;
+
+        in vec2 v_uv;
+        out vec4 fragColor;
+
+        // 유니폼 변수 선언
+        uniform vec2 u_resolution;
+        uniform vec3 u_camera_pos;
+        uniform vec3 u_camera_target;
+        uniform vec3 u_triangle_v0;
+        uniform vec3 u_triangle_v1;
+        uniform vec3 u_triangle_v2;
+        uniform vec3 u_triangle_color;
+        uniform vec3 u_light_pos;
+        uniform float u_use_shadows;
+        uniform float u_use_reflection;
+
+        // 수학 상수
+        const float INF = 1e30;
+        const float EPSILON = 0.00001;
+
+        // 레이(광선) 구조체
+        struct Ray {
+            vec3 origin;
+            vec3 dir;
+        };
+
+        // 교차 판정 결과 구조체
+        struct HitRecord {
+            float t;
+            vec3 p;
+            vec3 normal;
+            vec3 color;
+            float specular;
+            float reflection;
+        };
+
+        // 삼각형 교차 판정 함수 (Möller-Trumbore Ray-Triangle Intersection Algorithm)
+        bool intersectTriangle(Ray ray, vec3 v0, vec3 v1, vec3 v2, inout HitRecord rec, vec3 col) {
+            vec3 edge1 = v1 - v0;
+            vec3 edge2 = v2 - v0;
+            vec3 h = cross(ray.dir, edge2);
+            float a = dot(edge1, h);
+
+            if (a > -EPSILON && a < EPSILON) return false; // 레이가 삼각형과 평행함
+
+            float f = 1.0 / a;
+            vec3 s = ray.origin - v0;
+            float u = f * dot(s, h);
+
+            if (u < 0.0 || u > 1.0) return false;
+
+            vec3 q = cross(s, edge1);
+            float v = f * dot(ray.dir, q);
+
+            if (v < 0.0 || u + v > 1.0) return false;
+
+            // 선 세그먼트 충돌 지점 계산
+            float t = f * dot(edge2, q);
+
+            if (t > EPSILON && t < rec.t) {
+                rec.t = t;
+                rec.p = ray.origin + ray.dir * t;
+                // 법선 벡터 계산 및 방향 보정
+                vec3 normal = normalize(cross(edge1, edge2));
+                if (dot(normal, ray.dir) > 0.0) {
+                    normal = -normal;
+                }
+                rec.normal = normal;
+                rec.color = col;
+                rec.specular = 0.6; // 삼각형의 반사도
+                rec.reflection = 0.1; // 반사 세기
+                return true;
+            }
+            return false;
+        }
+
+        // 바닥 평면과의 교차판정 (y = -1.0 평면)
+        bool intersectPlane(Ray ray, inout HitRecord rec) {
+            float planeY = -1.0;
+            if (abs(ray.dir.y) < EPSILON) return false;
+
+            float t = (planeY - ray.origin.y) / ray.dir.y;
+            if (t > EPSILON && t < rec.t) {
+                rec.t = t;
+                rec.p = ray.origin + ray.dir * t;
+                rec.normal = vec3(0.0, 1.0, 0.0);
+
+                // 바닥 체커보드 패턴 생성
+                float scale = 1.0;
+                float checker = mod(floor(rec.p.x * scale) + floor(rec.p.z * scale), 2.0);
+                vec3 planeCol = (checker == 0.0) ? vec3(0.12, 0.14, 0.18) : vec3(0.18, 0.20, 0.24);
+                
+                // 원형 그리드 디테일 추가
+                float dist = length(rec.p.xz);
+                float ring = smoothstep(0.02, 0.0, abs(sin(dist * 3.14159) * 0.02));
+                planeCol = mix(planeCol, vec3(0.3, 0.3, 0.4), ring * 0.3);
+
+                rec.color = planeCol;
+                rec.specular = 0.2;
+                rec.reflection = 0.45; // 바닥은 반사율이 높음
+                return true;
+            }
+            return false;
+        }
+
+        // 씬 내 모든 오브젝트와의 충돌 체크 통합함수
+        bool intersectScene(Ray ray, inout HitRecord rec) {
+            bool hit = false;
+            // 1. 삼각형 교차 검사
+            if (intersectTriangle(ray, u_triangle_v0, u_triangle_v1, u_triangle_v2, rec, u_triangle_color)) {
+                hit = true;
+            }
+            // 2. 바닥 평면 교차 검사
+            if (intersectPlane(ray, rec)) {
+                hit = true;
+            }
+            return hit;
+        }
+
+        // 라이팅 및 Phong 셰이딩 모델
+        vec3 computeLighting(HitRecord rec, vec3 camDir) {
+            vec3 lightDir = normalize(u_light_pos - rec.p);
+            vec3 normal = rec.normal;
+
+            // 1. 앰비언트 광 (Ambient)
+            vec3 ambient = vec3(0.05, 0.05, 0.07);
+
+            // 2. 그림자 검사 (Shadow Ray)
+            float shadowMultiplier = 1.0;
+            if (u_use_shadows > 0.5) {
+                Ray shadowRay;
+                shadowRay.origin = rec.p + normal * 0.001; // 자가 그림자 에러 방지용 오프셋
+                shadowRay.dir = lightDir;
+                
+                HitRecord shadowRec;
+                shadowRec.t = INF;
+                
+                // 광원 방향으로 향하는 중에 다른 물체와 부딪힌다면 그림자 생성
+                if (intersectScene(shadowRay, shadowRec)) {
+                    float distToLight = length(u_light_pos - rec.p);
+                    if (shadowRec.t < distToLight) {
+                        shadowMultiplier = 0.2; // 완전 검은 그림자 대신 부드러운 하프 섀도우 연출
+                    }
+                }
+            }
+
+            // 3. 디퓨즈 (Diffuse 광)
+            float diff = max(dot(normal, lightDir), 0.0);
+            vec3 diffuse = rec.color * diff * vec3(1.0, 0.98, 0.95); // 약간 따뜻한 광원 색상
+
+            // 4. 스펙큘러 (Specular 반짝임)
+            vec3 viewDir = -camDir;
+            vec3 reflectDir = reflect(-lightDir, normal);
+            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+            vec3 specular = vec3(0.8) * spec * rec.specular;
+
+            // 총합
+            return ambient + (diffuse + specular) * shadowMultiplier;
+        }
+
+        void main() {
+            // 프래그먼트 정규화 좌표 (-1 ~ 1)
+            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+
+            // 레이 기초 세팅 (카메라 뷰 행렬 수동 유도)
+            vec3 camPos = u_camera_pos;
+            vec3 camTarget = u_camera_target;
+            vec3 up = vec3(0.0, 1.0, 0.0);
+
+            vec3 cz = normalize(camTarget - camPos);
+            vec3 cx = normalize(cross(cz, up));
+            vec3 cy = cross(cx, cz);
+
+            // FOV 60도 줌 세팅
+            float fov = 1.5; 
+            vec3 rayDirection = normalize(uv.x * cx + uv.y * cy + fov * cz);
+
+            Ray primaryRay;
+            primaryRay.origin = camPos;
+            primaryRay.dir = rayDirection;
+
+            // 레이 트레이싱 메인 루프 시작
+            HitRecord rec;
+            rec.t = INF;
+
+            vec3 finalColor = vec3(0.0);
+
+            if (intersectScene(primaryRay, rec)) {
+                // 첫 번째 히트 시 라이팅 계산
+                vec3 currentWeight = vec3(1.0);
+                vec3 litColor = computeLighting(rec, primaryRay.dir);
+                finalColor += currentWeight * litColor;
+
+                // 2차 반사 레이 (Reflection Ray) 계산
+                if (u_use_reflection > 0.5 && rec.reflection > 0.0) {
+                    currentWeight *= rec.reflection;
+
+                    Ray reflRay;
+                    reflRay.origin = rec.p + rec.normal * 0.001; // 오프셋
+                    reflRay.dir = reflect(primaryRay.dir, rec.normal);
+
+                    HitRecord reflRec;
+                    reflRec.t = INF;
+
+                    if (intersectScene(reflRay, reflRec)) {
+                        // 반사된 표면에서의 라이팅
+                        vec3 reflectedLitColor = computeLighting(reflRec, reflRay.dir);
+                        finalColor += currentWeight * reflectedLitColor;
+                    } else {
+                        // 허공을 쳤을 경우 스카이박스/배경색 그라디언트 반영
+                        vec3 skyColor = mix(vec3(0.05, 0.05, 0.08), vec3(0.02, 0.02, 0.04), reflRay.dir.y * 0.5 + 0.5);
+                        finalColor += currentWeight * skyColor;
+                    }
+                }
+            } else {
+                // 아무것도 맞추지 못했을 경우 우주/배경 그라디언트 배경 출력
+                float t = 0.5 * (primaryRay.dir.y + 1.0);
+                finalColor = mix(vec3(0.03, 0.04, 0.07), vec3(0.01, 0.01, 0.02), t);
+                
+                // 간단한 원거리 별빛 포인트 효과
+                float starDensity = fract(sin(dot(primaryRay.dir.xz, vec2(12.9898, 78.233))) * 43758.5453);
+                if (starDensity > 0.997) {
+                    finalColor += vec3(0.5 * (1.0 - primaryRay.dir.y));
+                }
+            }
+
+            // 감마 보정 (Gamma Correction) 및 노출 처리
+            finalColor = pow(finalColor, vec3(1.0 / 2.2));
+            fragColor = vec4(finalColor, 1.0);
+        }`;
+
+        // 셰이더 생성 및 컴파일 헬퍼 함수
+        function createShader(gl, type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error(gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+        // WebGL 프로그램 생성 및 링크
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+            console.error('Shader Program 링크 실패:', gl.getProgramInfoLog(program));
+        }
+
+        // 풀스크린 사각형 그릴 정점 정의
+        const positionAttributeLocation = gl.getAttribLocation(program, 'position');
+        const positionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        const positions = [
+            -1, -1,
+             1, -1,
+            -1,  1,
+            -1,  1,
+             1, -1,
+             1,  1,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+        const vao = gl.createVertexArray();
+        gl.bindVertexArray(vao);
+        gl.enableVertexAttribArray(positionAttributeLocation);
+        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+
+        // 유니폼 변수 위치 획득
+        const resUniformLocation = gl.getUniformLocation(program, 'u_resolution');
+        const camPosLoc = gl.getUniformLocation(program, 'u_camera_pos');
+        const camTargetLoc = gl.getUniformLocation(program, 'u_camera_target');
+        const v0Loc = gl.getUniformLocation(program, 'u_triangle_v0');
+        const v1Loc = gl.getUniformLocation(program, 'u_triangle_v1');
+        const v2Loc = gl.getUniformLocation(program, 'u_triangle_v2');
+        const triColLoc = gl.getUniformLocation(program, 'u_triangle_color');
+        const lightPosLoc = gl.getUniformLocation(program, 'u_light_pos');
+        const shadowToggleLoc = gl.getUniformLocation(program, 'u_use_shadows');
+        const reflectionToggleLoc = gl.getUniformLocation(program, 'u_use_reflection');
+
+        // ==========================================
+        //  삼각형 회전 및 애니메이션 업데이트 루프
+        // ==========================================
+
+        let lastTime = 0;
+        let triangleRotationAngle = 0;
+        let lightRotationAngle = 0;
+
+        function animate(currentTime) {
+            currentTime *= 0.001; // 밀리초 단위를 초 단위로
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
+            // 캔버스 크기 체크 후 지우기
+            resizeCanvas();
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            // 각도 업데이트 (유저 속도 제어 연계)
+            triangleRotationAngle += rotationSpeed * deltaTime;
+            lightRotationAngle += lightSpeed * deltaTime;
+
+            // 1. 삼각형의 세 정점 회전 변형 계산
+            // 원점을 기준으로 정삼각형 생성
+            const scale = 1.2;
+            const r = 0.8 * scale;
+            
+            // 로컬 공간상의 정삼각형 좌표 정의
+            const localV0 = [0, r, 0];
+            const localV1 = [-r * Math.cos(Math.PI/6), -r * Math.sin(Math.PI/6), 0];
+            const localV2 = [ r * Math.cos(Math.PI/6), -r * Math.sin(Math.PI/6), 0];
+
+            // Y축 및 X축 중심의 동시 회전 행렬 연산 수행
+            function rotateYAndX(v, angleRad) {
+                // Y축 회전
+                const cosY = Math.cos(angleRad);
+                const sinY = Math.sin(angleRad);
+                let x = v[0] * cosY - v[2] * sinY;
+                let z = v[0] * sinY + v[2] * cosY;
+                let y = v[1];
+
+                // 회전감을 다양하게 하기 위해 X축(롤링)도 소량 회전 병합
+                const cosX = Math.cos(angleRad * 0.5);
+                const sinX = Math.sin(angleRad * 0.5);
+                const tempY = y * cosX - z * sinX;
+                z = y * sinX + z * cosX;
+                y = tempY;
+
+                // 위치를 살짝 공중에 띄우기 (y offset 0.15)
+                return [x, y + 0.15, z];
+            }
+
+            const rotV0 = rotateYAndX(localV0, triangleRotationAngle);
+            const rotV1 = rotateYAndX(localV1, triangleRotationAngle);
+            const rotV2 = rotateYAndX(localV2, triangleRotationAngle);
+
+            // 2. 궤도를 회전하는 동적 광원 계산
+            const lightRadius = 4.5;
+            const lightX = Math.sin(lightRotationAngle) * lightRadius;
+            const lightZ = Math.cos(lightRotationAngle) * lightRadius;
+            const lightY = 3.5; // 높은 포지션 고정
+
+            // 3. 구면좌표계 기반 카메라 좌표 변환
+            const camX = cameraDistance * Math.cos(cameraAngleX) * Math.sin(cameraAngleY);
+            const camY = cameraDistance * Math.sin(cameraAngleX);
+            const camZ = cameraDistance * Math.cos(cameraAngleX) * Math.cos(cameraAngleY);
+
+            // 프로그램 활성화 및 유니폼 변수 세팅
+            gl.useProgram(program);
+
+            gl.uniform2f(resUniformLocation, canvas.width, canvas.height);
+            gl.uniform3f(camPosLoc, camX, camY, camZ);
+            gl.uniform3f(camTargetLoc, 0.0, 0.1, 0.0); // 타겟점
+            
+            // 변환된 삼각형 정점 전송
+            gl.uniform3f(v0Loc, rotV0[0], rotV0[1], rotV0[2]);
+            gl.uniform3f(v1Loc, rotV1[0], rotV1[1], rotV1[2]);
+            gl.uniform3f(v2Loc, rotV2[0], rotV2[1], rotV2[2]);
+            
+            // 색상 및 옵션 정보 전송
+            gl.uniform3f(triColLoc, triangleColor[0], triangleColor[1], triangleColor[2]);
+            gl.uniform3f(lightPosLoc, lightX, lightY, lightZ);
+            gl.uniform1f(shadowToggleLoc, useShadows);
+            gl.uniform1f(reflectionToggleLoc, useReflection);
+
+            // 정점 그리기 수행
+            gl.bindVertexArray(vao);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            requestAnimationFrame(animate);
+        }
+
+        // 애니메이션 최초 시작
+        window.onload = function() {
+            requestAnimationFrame(animate);
+        }
+    </script>
+</body>
+</html>
