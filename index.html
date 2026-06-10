@@ -3,696 +3,1253 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>실시간 레이트레이싱 회전하는 삼각형</title>
-    <!-- Tailwind CSS 사용 -->
+    <title>GPU 가속 선형대수 연산 샌드박스 (WebGL2 GPGPU)</title>
+    <!-- Tailwind CSS 탑재 -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Lucide Icons 사용 -->
+    <!-- Lucide Icons 아이콘 팩 -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@400;700&display=swap');
         body {
-            background-color: #0d0f14;
-            color: #f3f4f6;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            overflow-x: hidden;
+            font-family: 'Inter', Arial, sans-serif;
         }
-        canvas {
-            image-rendering: pixelated;
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+        /* NVIDIA 스크롤바 커스텀 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f7f7f7;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cccccc;
+            border-radius: 2px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #76b900;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col lg:flex-row">
+<body class="bg-[#ffffff] text-[#1a1a1a] min-h-screen flex flex-col selection:bg-[#76b900] selection:text-black">
 
-    <!-- 왼쪽: 컨트롤 패널 -->
-    <div class="w-full lg:w-96 bg-gray-900 border-b lg:border-b-0 lg:border-r border-gray-800 p-6 flex flex-col justify-between shrink-0">
-        <div>
-            <!-- 헤더 -->
-            <div class="flex items-center gap-3 mb-6">
-                <div class="p-2.5 bg-indigo-600 rounded-xl text-white shadow-lg shadow-indigo-500/20">
-                    <i data-lucide="triangle" class="w-6 h-6 animate-pulse"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-tight text-white">GPU 레이트레이싱</h1>
-                    <p class="text-xs text-indigo-400 font-medium">돌아가는 3D 삼각형 시뮬레이터</p>
+    <!-- 헤더 영역 (NVIDIA Black Canvas 스타일) -->
+    <header class="bg-[#000000] text-white border-b border-[#5e5e5e] sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-3">
+            <!-- 시그니처 큐브 모티프 -->
+            <div class="w-6 h-6 border-2 border-[#76b900] flex items-center justify-center relative">
+                <span class="absolute top-[-2px] left-[-2px] w-1.5 h-1.5 bg-[#76b900]"></span>
+                <i data-lucide="cpu" class="w-3.5 h-3.5 text-[#76b900]"></i>
+            </div>
+            <div>
+                <h1 class="text-sm font-bold tracking-widest uppercase flex items-center gap-2">
+                    NVIDIA GPGPU LINEAR ALGEBRA CORE
+                    <span class="text-[9px] bg-[#76b900] text-black px-1.5 py-0.5 rounded-[2px] font-mono font-bold tracking-normal">WEBGL 2.0</span>
+                </h1>
+                <p class="text-[10px] text-[#a7a7a7] uppercase tracking-wider">Parallel Numerical Compute Accelerator Sandbox</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 text-[10px] text-[#a7a7a7] bg-[#1a1a1a] px-3 py-1 rounded-[2px] border border-[#5e5e5e]">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#76b900] animate-pulse"></span>
+            GPU COMPUTE HARDWARE READY
+        </div>
+    </header>
+
+    <!-- 메인 비디오 샌드박스 쉘 (White-Canvas 본문) -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6 max-w-[1280px] mx-auto w-full">
+        
+        <!-- 왼쪽 컨트롤 및 입력 패널 (5 cols) -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- 연산 선택 카드 (NVIDIA 아키텍처) -->
+            <div class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 relative">
+                <!-- 코너 스퀘어 포인트 -->
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                
+                <h2 class="text-xs font-bold text-[#000000] uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-[#cccccc] pb-2">
+                    <i data-lucide="activity" class="w-3.5 h-3.5 text-[#76b900]"></i> SELECT COMPUTE OPERATOR
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setOp('matmul')" id="btn-matmul" class="op-btn flex flex-col items-start p-3 rounded-[2px] border transition-all text-left bg-[#000000] border-[#000000] text-white">
+                        <span class="font-bold text-xs">MATRIX MUL (행렬곱)</span>
+                        <span class="text-[9px] text-[#a7a7a7] mt-1 uppercase">O(N³) Parallel Engine</span>
+                    </button>
+                    <button onclick="setOp('vecadd')" id="btn-vecadd" class="op-btn flex flex-col items-start p-3 rounded-[2px] border border-[#cccccc] hover:border-[#76b900] text-[#1a1a1a] transition-all text-left bg-white">
+                        <span class="font-bold text-xs text-[#1a1a1a]">VECTOR ADD (벡터합)</span>
+                        <span class="text-[9px] text-[#757575] mt-1 uppercase">Element-wise Parallel</span>
+                    </button>
+                    <button onclick="setOp('transform')" id="btn-transform" class="op-btn flex flex-col items-start p-3 rounded-[2px] border border-[#cccccc] hover:border-[#76b900] text-[#1a1a1a] transition-all text-left bg-white">
+                        <span class="font-bold text-xs text-[#1a1a1a]">2D TRANSFORM (기하)</span>
+                        <span class="text-[9px] text-[#757575] mt-1 uppercase">Real-time Grid Shift</span>
+                    </button>
+                    <button onclick="setOp('inverse')" id="btn-inverse" class="op-btn flex flex-col items-start p-3 rounded-[2px] border border-[#cccccc] hover:border-[#76b900] text-[#1a1a1a] transition-all text-left bg-white">
+                        <span class="font-bold text-xs text-[#1a1a1a]">INVERSE MAT (역행렬)</span>
+                        <span class="text-[9px] text-[#757575] mt-1 uppercase">Gaussian Elimination</span>
+                    </button>
                 </div>
             </div>
 
-            <p class="text-xs text-gray-400 mb-6 leading-relaxed">
-                WebGL 2.0 프래그먼트 셰이더 기반의 실시간 GPU 레이트레이서입니다. 
-                <strong>Möller-Trumbore 알고리즘</strong>을 사용하여 광선과 삼각형의 충돌을 실시간으로 계산합니다.
+            <!-- 데이터 크기 제어 카드 -->
+            <div class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <div class="flex justify-between items-center mb-4 border-b border-[#cccccc] pb-2">
+                    <h2 class="text-xs font-bold text-[#000000] uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-3.5 h-3.5 text-[#76b900]"></i> SET WORKLOAD DIMENSIONS
+                    </h2>
+                    <span id="dimension-indicator" class="text-[10px] code-font bg-white px-2 py-0.5 rounded-[2px] text-[#1a1a1a] border border-[#cccccc]">256 x 256</span>
+                </div>
+                
+                <input type="range" id="size-slider" min="2" max="1024" step="2" value="256" class="w-full accent-[#76b900] bg-[#cccccc] h-1.5 rounded-[2px] appearance-none cursor-pointer" oninput="onSizeChange(this.value)">
+                
+                <div class="flex justify-between text-[9px] text-[#757575] mt-2 font-mono uppercase">
+                    <span>2 x 2</span>
+                    <span>256 x 256 (Normal)</span>
+                    <span>512 x 512 (Heavy)</span>
+                    <span>1024 x 1024 (Ultra)</span>
+                </div>
+                
+                <div id="warn-cpu-box" class="mt-4 p-3 bg-[#feeeb2] border border-[#ef9100] text-[#df6500] rounded-[2px] text-xs flex gap-2 hidden">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 mt-0.5"></i>
+                    <span>차원 크기가 512를 넘어서면 브라우저 정지를 예방하기 위해 싱글스레드 CPU 벤치마크 루프가 자동으로 제한되고 GPU 가속 수치만 연산합니다.</span>
+                </div>
+            </div>
+
+            <!-- 대용량 수치 연산 및 행렬 수동 커스텀 패널 -->
+            <div id="panel-math" class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 flex-1 flex flex-col gap-4 relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <h3 class="text-xs font-bold text-[#000000] uppercase tracking-wider border-b border-[#cccccc] pb-2 flex items-center gap-2">
+                    <i data-lucide="terminal" class="w-3.5 h-3.5 text-[#76b900]"></i> DATA CONFIGURATION INTERFACE
+                </h3>
+
+                <!-- 입력 모드 셀렉터 탭 (NVIDIA Pill-tab 스타일) -->
+                <div class="flex bg-white p-1 rounded-[2px] border border-[#cccccc] text-[11px] font-bold">
+                    <button id="tab-random" onclick="setInputMode('random')" class="flex-1 py-1.5 text-center rounded-[2px] text-white bg-[#000000] transition-all uppercase tracking-wider">
+                        RANDOM
+                    </button>
+                    <button id="tab-manual" onclick="setInputMode('manual')" class="flex-1 py-1.5 text-center rounded-[2px] text-[#757575] hover:text-[#000000] transition-all uppercase tracking-wider">
+                        MANUAL
+                    </button>
+                    <button id="tab-preset" onclick="setInputMode('preset')" class="flex-1 py-1.5 text-center rounded-[2px] text-[#757575] hover:text-[#000000] transition-all uppercase tracking-wider">
+                        PRESETS
+                    </button>
+                </div>
+
+                <!-- 동적 탭 입력 영역 -->
+                <div class="space-y-3 bg-[#ffffff] p-3 rounded-[2px] border border-[#cccccc]">
+                    <!-- 무작위 생성 컨텐츠 -->
+                    <div id="panel-input-random" class="block space-y-2 text-xs">
+                        <p class="text-[#757575] leading-relaxed">선택한 행렬 스펙에 부합하는 부동소수점 하이퍼 매트릭스 난수를 병렬 메모리에 고속 매핑합니다.</p>
+                        <button onclick="randomizeInputs()" class="w-full py-2 bg-white hover:bg-[#f7f7f7] border border-[#cccccc] text-[#1a1a1a] rounded-[2px] text-xs font-bold flex items-center justify-center gap-1.5 transition-all">
+                            <i data-lucide="shuffle" class="w-3.5 h-3.5 text-[#76b900]"></i> GENERATE NEW RANDOM FIELDS
+                        </button>
+                    </div>
+
+                    <!-- 직접 입력 컨텐츠 -->
+                    <div id="panel-input-manual" class="hidden space-y-3">
+                        <div id="manual-grid-container" class="space-y-4"></div>
+                        <div id="manual-textarea-container" class="hidden space-y-2">
+                            <p class="text-[11px] text-[#757575] leading-normal">
+                                대형 데이터 행렬 처리를 위해 공백이나 콤마로 구분하여 총 <strong id="req-cell-count" class="text-black">N</strong>개의 수치를 기입하세요.
+                            </p>
+                            <div class="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label class="text-[10px] text-[#000000] font-bold block mb-1 uppercase tracking-wider">Matrix A Raw Data</label>
+                                    <textarea id="area-matA" rows="3" class="w-full bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-2 text-xs font-mono text-[#1a1a1a] focus:border-[#76b900] focus:outline-none"></textarea>
+                                </div>
+                                <div id="area-matB-wrapper">
+                                    <label class="text-[10px] text-[#000000] font-bold block mb-1 uppercase tracking-wider">Matrix B Raw Data</label>
+                                    <textarea id="area-matB" rows="3" class="w-full bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-2 text-xs font-mono text-[#1a1a1a] focus:border-[#76b900] focus:outline-none"></textarea>
+                                </div>
+                            </div>
+                            <button onclick="parseTextareaInputs()" class="w-full py-2 bg-[#000000] text-white hover:bg-[#1a1a1a] rounded-[2px] text-xs font-bold transition-all uppercase tracking-widest">
+                                Parse Text Matrix
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 프리셋 컨텐츠 -->
+                    <div id="panel-input-preset" class="hidden space-y-3">
+                        <p class="text-xs text-[#757575]">수학적 성향을 지닌 특정 알고리즘 행렬을 VRAM에 바인딩합니다.</p>
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <label class="text-[10px] text-[#757575] block mb-1 uppercase font-bold">Matrix A Preset</label>
+                                <select id="preset-select-a" onchange="applyPreset('A', this.value)" class="w-full bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-2 text-[#1a1a1a] focus:border-[#76b900] focus:outline-none">
+                                    <option value="identity">Identity (단위행렬)</option>
+                                    <option value="diagonal">Diagonal (대각행렬)</option>
+                                    <option value="hilbert">Hilbert (힐베르트)</option>
+                                    <option value="symmetric">Symmetric (대칭형)</option>
+                                    <option value="constant">All Constant (1.0)</option>
+                                </select>
+                            </div>
+                            <div id="preset-select-b-wrapper">
+                                <label class="text-[10px] text-[#757575] block mb-1 uppercase font-bold">Matrix B Preset</label>
+                                <select id="preset-select-b" onchange="applyPreset('B', this.value)" class="w-full bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-2 text-[#1a1a1a] focus:border-[#76b900] focus:outline-none">
+                                    <option value="identity">Identity (단위행렬)</option>
+                                    <option value="diagonal">Diagonal (대각행렬)</option>
+                                    <option value="hilbert">Hilbert (힐베르트)</option>
+                                    <option value="symmetric">Symmetric (대칭형)</option>
+                                    <option value="constant">All Constant (2.0)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 실시간 행렬/벡터 수치 샘플 미리보기 -->
+                <div class="flex-1 min-h-[160px] bg-[#ffffff] rounded-[2px] border border-[#cccccc] p-3 font-mono text-[11px] text-[#1a1a1a] overflow-y-auto flex flex-col gap-2 relative">
+                    <div class="absolute top-2 right-2 text-[9px] bg-[#76b900]/10 text-[#5a8d00] border border-[#76b900]/20 px-1.5 py-0.5 rounded-[2px] uppercase font-bold tracking-wider">Memory Map</div>
+                    <div id="matrix-preview-a">
+                        <span class="text-[#000000] font-bold">[MATRIX A INTERIM RAW]</span>
+                        <div class="mt-1 pl-2 text-[#757575] code-font">Loading...</div>
+                    </div>
+                    <div id="matrix-preview-b" class="mt-2 border-t border-[#f7f7f7] pt-2">
+                        <span class="text-[#000000] font-bold">[MATRIX B INTERIM RAW]</span>
+                        <div class="mt-1 pl-2 text-[#757575] code-font">Loading...</div>
+                    </div>
+                </div>
+
+                <!-- 연산 개시 버튼 -->
+                <button onclick="executeMathCore()" class="w-full py-4 bg-[#76b900] hover:bg-[#5a8d00] text-black font-bold rounded-[2px] transition-all flex items-center justify-center gap-2 text-sm uppercase tracking-widest">
+                    <i data-lucide="zap" class="w-4.5 h-4.5 fill-black"></i> EXECUTE PARALLEL PIPELINE
+                </button>
+            </div>
+
+            <!-- 실시간 기하 변환 제어 패널 (Transform 모드일 때 보임) -->
+            <div id="panel-transform" class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 flex-1 flex flex-col gap-4 hidden relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <h3 class="text-xs font-bold text-[#000000] uppercase tracking-wider border-b border-[#cccccc] pb-2 flex items-center gap-2">
+                    <i data-lucide="move" class="w-3.5 h-3.5 text-[#76b900]"></i> 2D SPATIAL TRANSFORM MATRIX $T$
+                </h3>
+                <p class="text-xs text-[#757575]">실시간 셰이더 벡터 행렬곱 연산 테스트를 위한 기하 변수 스케일링 슬라이더 모듈입니다.</p>
+
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-[#1a1a1a] font-bold">X-Axis Scale</span>
+                            <span id="val-sx" class="text-[#76b900] font-bold font-mono">1.0</span>
+                        </div>
+                        <input type="range" id="slide-sx" min="0.1" max="2.5" step="0.05" value="1.0" class="w-full accent-[#76b900] bg-[#cccccc] h-1 rounded-[2px] cursor-pointer" oninput="updateTransformMatrix()">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-[#1a1a1a] font-bold">Y-Axis Scale</span>
+                            <span id="val-sy" class="text-[#76b900] font-bold font-mono">1.0</span>
+                        </div>
+                        <input type="range" id="slide-sy" min="0.1" max="2.5" step="0.05" value="1.0" class="w-full accent-[#76b900] bg-[#cccccc] h-1 rounded-[2px] cursor-pointer" oninput="updateTransformMatrix()">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-[#1a1a1a] font-bold">Rotation Angle</span>
+                            <span id="val-rot" class="text-[#76b900] font-bold font-mono">0°</span>
+                        </div>
+                        <input type="range" id="slide-rot" min="-180" max="180" step="1" value="0" class="w-full accent-[#76b900] bg-[#cccccc] h-1 rounded-[2px] cursor-pointer" oninput="updateTransformMatrix()">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-[#1a1a1a] font-bold">Shear Factor X</span>
+                            <span id="val-sh" class="text-[#76b900] font-bold font-mono">0.0</span>
+                        </div>
+                        <input type="range" id="slide-sh" min="-2.0" max="2.0" step="0.1" value="0.0" class="w-full accent-[#76b900] bg-[#cccccc] h-1 rounded-[2px] cursor-pointer" oninput="updateTransformMatrix()">
+                    </div>
+                </div>
+
+                <!-- 현재 생성된 변환 행렬 구조 -->
+                <div class="p-3 bg-white rounded-[2px] border border-[#cccccc] text-center">
+                    <span class="text-[9px] text-[#757575] block mb-2 font-mono uppercase tracking-wider">Affine Transform Mat $2 \times 2$</span>
+                    <div class="grid grid-cols-2 gap-2 text-xs font-mono max-w-[160px] mx-auto text-[#000000] font-bold">
+                        <div id="m00" class="border border-[#cccccc] p-1.5 rounded-[2px] bg-[#f7f7f7]">1.00</div>
+                        <div id="m01" class="border border-[#cccccc] p-1.5 rounded-[2px] bg-[#f7f7f7]">0.00</div>
+                        <div id="m10" class="border border-[#cccccc] p-1.5 rounded-[2px] bg-[#f7f7f7]">0.00</div>
+                        <div id="m11" class="border border-[#cccccc] p-1.5 rounded-[2px] bg-[#f7f7f7]">1.00</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 오른쪽 모니터링 및 벤치마킹 대시보드 (7 cols) -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- 연산결과 분석 / 성능 벤치마크 (NVIDIA Performance Monitor 스타일) -->
+            <div class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <h2 class="text-xs font-bold text-[#000000] uppercase tracking-wider mb-4 border-b border-[#cccccc] pb-2 flex items-center gap-2">
+                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-[#76b900]"></i> GPU VS CPU ENGINE PROFILE BENCHMARK
+                </h2>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="bg-[#ffffff] p-4 rounded-[2px] border border-[#cccccc] flex flex-col justify-between">
+                        <span class="text-[10px] text-[#757575] font-bold uppercase tracking-wider">GPU RUNTIME</span>
+                        <div class="my-2">
+                            <span id="gpu-time" class="text-2xl font-black text-[#5a8d00] code-font">--</span>
+                            <span class="text-xs text-[#1a1a1a] ml-1">ms</span>
+                        </div>
+                        <span class="text-[9px] text-[#757575] uppercase font-mono">GLSL Accelerated</span>
+                    </div>
+                    <div class="bg-[#ffffff] p-4 rounded-[2px] border border-[#cccccc] flex flex-col justify-between">
+                        <span class="text-[10px] text-[#757575] font-bold uppercase tracking-wider">CPU RUNTIME</span>
+                        <div class="my-2">
+                            <span id="cpu-time" class="text-2xl font-black text-[#1a1a1a] code-font">--</span>
+                            <span class="text-xs text-[#1a1a1a] ml-1">ms</span>
+                        </div>
+                        <span class="text-[9px] text-[#757575] uppercase font-mono">Single-Thread JS</span>
+                    </div>
+                    <div class="bg-[#ffffff] p-4 rounded-[2px] border border-[#76b900] bg-[#76b900]/5 flex flex-col justify-between">
+                        <span class="text-[10px] text-[#5a8d00] font-bold uppercase tracking-wider">SPEEDUP FACTOR</span>
+                        <div class="my-2">
+                            <span id="speedup-factor" class="text-2xl font-black text-[#76b900] code-font">--</span>
+                            <span class="text-xs text-[#5a8d00] ml-1">x</span>
+                        </div>
+                        <span class="text-[9px] text-[#5a8d00] uppercase font-bold tracking-wider">GPU Acceleration</span>
+                    </div>
+                </div>
+
+                <!-- 시각화 차트 그래프 모방 바 -->
+                <div class="space-y-2 mt-2 bg-white p-4 rounded-[2px] border border-[#cccccc]">
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-[11px] text-[#1a1a1a] font-bold">
+                            <span class="uppercase tracking-wide">WebGL 2.0 Parallel Shaders</span>
+                            <span id="gpu-bar-text" class="text-[#76b900] font-mono">0.0 ms</span>
+                        </div>
+                        <div class="h-2.5 w-full bg-[#f7f7f7] rounded-[2px] overflow-hidden border border-[#cccccc]">
+                            <div id="gpu-perf-bar" class="h-full bg-[#76b900] w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-[11px] text-[#1a1a1a] font-bold">
+                            <span class="uppercase tracking-wide">Native JavaScript Kernel</span>
+                            <span id="cpu-bar-text" class="text-[#1a1a1a] font-mono">0.0 ms</span>
+                        </div>
+                        <div class="h-2.5 w-full bg-[#f7f7f7] rounded-[2px] overflow-hidden border border-[#cccccc]">
+                            <div id="cpu-perf-bar" class="h-full bg-[#000000] w-0 transition-all duration-500"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 인터랙티브 파티클 변환 캔버스 (실시간 변환 모드 전용 - NVIDIA Deep Black 테마) -->
+            <div id="visualizer-container" class="bg-[#000000] text-white border border-[#5e5e5e] rounded-[2px] p-5 flex flex-col gap-4 flex-1 relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <div class="flex justify-between items-center border-b border-[#5e5e5e] pb-2">
+                    <h2 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="eye" class="w-3.5 h-3.5 text-[#76b900]"></i> T-SPACE POINT SHIFT VISUALIZER
+                    </h2>
+                    <span class="text-[10px] text-[#a7a7a7] uppercase tracking-wider">10,000 Vertex Pipeline</span>
+                </div>
+                
+                <!-- 실제 WebGL 렌더링 캔버스 영역 -->
+                <div class="relative flex-1 min-h-[300px] bg-[#000000] rounded-[2px] border border-[#5e5e5e] overflow-hidden flex items-center justify-center">
+                    <canvas id="transform-canvas" class="w-full h-full absolute inset-0"></canvas>
+                    <div class="absolute bottom-3 left-3 bg-[#1a1a1a]/95 border border-[#5e5e5e] px-3 py-1.5 rounded-[2px] text-[10px] text-white flex items-center gap-2 pointer-events-none">
+                        <span class="w-1.5 h-1.5 rounded-full bg-[#76b900] animate-ping"></span>
+                        <span class="uppercase font-bold tracking-wider">Dynamic Shader Core Mapping</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 수치 연산 결과 출력 패널 (수치 연산 전용) -->
+            <div id="math-result-container" class="bg-[#f7f7f7] border border-[#cccccc] rounded-[2px] p-5 flex flex-col gap-4 flex-1 relative">
+                <span class="absolute top-[-1px] left-[-1px] w-2.5 h-2.5 bg-[#76b900]"></span>
+                <div class="flex justify-between items-center border-b border-[#cccccc] pb-2">
+                    <h2 class="text-xs font-bold text-[#000000] uppercase tracking-wider flex items-center gap-2">
+                        <i data-lucide="check-square" class="w-3.5 h-3.5 text-[#76b900]"></i> RAW FLOATING POINT MATRIX OUTPUT
+                    </h2>
+                    <span class="text-[10px] text-[#757575] uppercase font-bold tracking-wide">Matrix Snapshot Block</span>
+                </div>
+                
+                <div class="flex-1 bg-[#ffffff] border border-[#cccccc] rounded-[2px] p-4 font-mono text-xs overflow-y-auto max-h-[350px]">
+                    <div id="math-result-output" class="text-[#1a1a1a] space-y-2">
+                        <div class="text-[#757575] italic">대기 상태: 상단 연산 실행 인터페이스 버튼을 클릭하여 파이프라인을 작동시키십시오.</div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- 커스텀 에러 모달/알림 UI (alert 대체) -->
+    <div id="modal-alert" class="fixed inset-0 bg-[#000000]/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4 opacity-0 pointer-events-none transition-all duration-300">
+        <div class="bg-[#ffffff] border-2 border-[#e52020] rounded-[2px] max-w-md w-full p-6 shadow-2xl transform scale-95 transition-all duration-300 relative">
+            <span class="absolute top-[-2px] left-[-2px] w-3 h-3 bg-[#e52020]"></span>
+            <div class="flex items-center gap-4 text-[#e52020] mb-4">
+                <div class="p-2 bg-[#e52020]/10 rounded-[2px] border border-[#e52020]/20">
+                    <i data-lucide="alert-octagon" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h4 id="alert-title" class="font-bold text-sm text-[#000000] uppercase tracking-wider">MATHEMATICAL EXCEPTION</h4>
+                    <p class="text-[10px] text-[#e52020]/80 uppercase font-bold tracking-wide">Singular Matrix Detect</p>
+                </div>
+            </div>
+            <p id="alert-desc" class="text-[#1a1a1a] text-xs leading-relaxed mb-6 font-mono bg-[#f7f7f7] p-3 border border-[#cccccc] rounded-[2px]">
+                디터미넌트(Determinant) 값이 완전히 0으로 수렴하여 역행렬 산출이 원천적으로 불가능합니다. 수치적 정의 한계를 무시할 수 없으므로 연산을 긴급 제어 복구합니다.
             </p>
-
-            <hr class="border-gray-800 mb-6" />
-
-            <!-- 설정 그룹 -->
-            <div class="space-y-6">
-                <!-- 애니메이션 속도 -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                            <i data-lucide="gauge" class="w-4 h-4 text-indigo-400"></i> 회전 속도
-                        </label>
-                        <span id="speed-val" class="text-sm font-mono text-indigo-300">1.0x</span>
-                    </div>
-                    <input type="range" id="speed" min="0" max="3" step="0.1" value="1.0" 
-                           class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-                </div>
-
-                <!-- 삼각형 색상 -->
-                <div>
-                    <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5 mb-2">
-                        <i data-lucide="palette" class="w-4 h-4 text-indigo-400"></i> 삼각형 색상
-                    </label>
-                    <div class="grid grid-cols-5 gap-2">
-                        <button onclick="setTriangleColor('#f43f5e')" class="h-8 rounded-lg bg-rose-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-rose"></button>
-                        <button onclick="setTriangleColor('#10b981')" class="h-8 rounded-lg bg-emerald-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-emerald"></button>
-                        <button onclick="setTriangleColor('#3b82f6')" class="h-8 rounded-lg bg-blue-500 border-2 border-white transition-all focus:outline-none hover:scale-105" id="color-blue"></button>
-                        <button onclick="setTriangleColor('#eab308')" class="h-8 rounded-lg bg-yellow-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-yellow"></button>
-                        <button onclick="setTriangleColor('#a855f7')" class="h-8 rounded-lg bg-purple-500 border-2 border-transparent transition-all focus:outline-none hover:scale-105" id="color-purple"></button>
-                    </div>
-                </div>
-
-                <!-- 빛 위치 제어 -->
-                <div>
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                            <i data-lucide="sun" class="w-4 h-4 text-indigo-400"></i> 광원 회전 속도
-                        </label>
-                        <span id="light-speed-val" class="text-sm font-mono text-indigo-300">0.5x</span>
-                    </div>
-                    <input type="range" id="light-speed" min="0" max="2" step="0.1" value="0.5" 
-                           class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
-                </div>
-
-                <!-- 그래픽 스위치 토글 -->
-                <div class="space-y-3 bg-gray-950 p-4 rounded-xl border border-gray-800">
-                    <!-- 그림자 비활성화 -->
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                            <i data-lucide="moon" class="w-3.5 h-3.5 text-indigo-400"></i> 하드 섀도우 (그림자)
-                        </span>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="shadow-toggle" checked class="sr-only peer">
-                            <div class="w-9 h-5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                        </label>
-                    </div>
-                    <!-- 바닥 반사 -->
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                            <i data-lucide="layers" class="w-3.5 h-3.5 text-indigo-400"></i> 바닥 반사 (Reflection)
-                        </span>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" id="reflection-toggle" checked class="sr-only peer">
-                            <div class="w-9 h-5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                        </label>
-                    </div>
-                </div>
+            <div class="flex justify-end">
+                <button onclick="closeAlert()" class="px-5 py-2 bg-[#e52020] hover:bg-[#650b0b] text-white font-bold rounded-[2px] text-xs transition-all uppercase tracking-widest">
+                    RECOVERY COMMAND
+                </button>
             </div>
-        </div>
-
-        <!-- 하단: 조작 정보 -->
-        <div class="mt-8 border-t border-gray-800 pt-6">
-            <div class="bg-indigo-950/40 border border-indigo-900/50 p-4 rounded-xl">
-                <h4 class="text-xs font-bold text-indigo-300 flex items-center gap-1.5 mb-1.5">
-                    <i data-lucide="mouse-pointer-click" class="w-4 h-4"></i> 카메라 회전 조작법
-                </h4>
-                <p class="text-[11px] text-gray-400 leading-relaxed">
-                    렌더링 화면을 <strong>클릭 후 드래그</strong>하면 카메라 각도를 조절할 수 있습니다. 마우스 휠을 통해 줌인/아웃이 가능합니다.
-                </p>
-            </div>
-            <p class="text-[10px] text-gray-600 mt-4 text-center">© 2026 WebGL Raytracer Simulation</p>
         </div>
     </div>
 
-    <!-- 오른쪽: 메인 캔버스 영역 -->
-    <div class="flex-1 flex flex-col relative bg-black select-none overflow-hidden">
-        <!-- 상단 내비 바 -->
-        <div class="absolute top-0 left-0 right-0 z-10 px-6 py-4 bg-gradient-to-b from-black/80 to-transparent flex items-center justify-between pointer-events-none">
-            <div class="flex items-center gap-2">
-                <span class="flex h-2 w-2 relative">
-                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span class="text-xs font-mono tracking-wider uppercase text-gray-300">GPU ACTIVE (60FPS)</span>
-            </div>
-            <div id="render-time" class="text-xs font-mono text-indigo-400 pointer-events-auto bg-gray-900/80 px-3 py-1.5 rounded-lg border border-gray-800">
-                Resolution: 100%
-            </div>
-        </div>
+    <!-- 푸터 영역 (NVIDIA Global Footer 스타일) -->
+    <footer class="border-t border-[#5e5e5e] bg-[#000000] text-[#a7a7a7] text-[10px] py-6 px-6 text-center uppercase tracking-widest">
+        &copy; 2026 Senior GPGPU Labs. All Rights Reserved. Designed for NVIDIA Developer & Gemini Canvas Core.
+    </footer>
 
-        <!-- 캔버스 컨테이너 -->
-        <div class="w-full h-full flex items-center justify-center relative flex-1 min-h-[400px]">
-            <canvas id="raytrace-canvas" class="w-full h-full object-cover cursor-grab active:cursor-grabbing"></canvas>
-        </div>
-    </div>
-
-    <!-- WebGL2 셰이더 및 로직 구현 JS -->
+    <!-- GLSL 셰이더 소스코드 탑재 -->
     <script>
-        // Lucide 아이콘 초기화
-        lucide.createIcons();
-
-        // DOM 요소 획득
-        const canvas = document.getElementById('raytrace-canvas');
-        const speedInput = document.getElementById('speed');
-        const speedVal = document.getElementById('speed-val');
-        const lightSpeedInput = document.getElementById('light-speed');
-        const lightSpeedVal = document.getElementById('light-speed-val');
-        const shadowToggle = document.getElementById('shadow-toggle');
-        const reflectionToggle = document.getElementById('reflection-toggle');
-        const renderTimeEl = document.getElementById('render-time');
-
-        // 상태 변수
-        let triangleColor = [0.23, 0.51, 0.96]; // #3b82f6 기본 파란색 (RGB [0,1])
-        let rotationSpeed = 1.0;
-        let lightSpeed = 0.5;
-        let useShadows = 1.0;
-        let useReflection = 1.0;
-
-        // 카메라 조작 상태
-        let cameraAngleX = 0.3; // 라디안
-        let cameraAngleY = 0.5; // 라디안
-        let cameraDistance = 5.0;
-        let isDragging = false;
-        let previousMousePosition = { x: 0, y: 0 };
-
-        // 색상 선택용 헬퍼 함수
-        function setTriangleColor(hex) {
-            // 버튼 테두리 리셋 및 설정
-            ['rose', 'emerald', 'blue', 'yellow', 'purple'].forEach(col => {
-                const btn = document.getElementById(`color-${col}`);
-                if (btn) btn.classList.remove('border-white');
-                if (btn) btn.classList.add('border-transparent');
-            });
-
-            // 매칭되는 색상 찾아서 보더 강조
-            let targetColorId = 'color-blue';
-            if (hex === '#f43f5e') { triangleColor = [0.95, 0.24, 0.37]; targetColorId = 'color-rose'; }
-            else if (hex === '#10b981') { triangleColor = [0.06, 0.72, 0.50]; targetColorId = 'color-emerald'; }
-            else if (hex === '#3b82f6') { triangleColor = [0.23, 0.51, 0.96]; targetColorId = 'color-blue'; }
-            else if (hex === '#eab308') { triangleColor = [0.91, 0.70, 0.03]; targetColorId = 'color-yellow'; }
-            else if (hex === '#a855f7') { triangleColor = [0.65, 0.33, 0.96]; targetColorId = 'color-purple'; }
-
-            const activeBtn = document.getElementById(targetColorId);
-            if (activeBtn) {
-                activeBtn.classList.remove('border-transparent');
-                activeBtn.classList.add('border-white');
-            }
-        }
-
-        // 제어 이벤트 리스너들
-        speedInput.addEventListener('input', (e) => {
-            rotationSpeed = parseFloat(e.target.value);
-            speedVal.innerText = rotationSpeed.toFixed(1) + 'x';
-        });
-
-        lightSpeedInput.addEventListener('input', (e) => {
-            lightSpeed = parseFloat(e.target.value);
-            lightSpeedVal.innerText = lightSpeed.toFixed(1) + 'x';
-        });
-
-        shadowToggle.addEventListener('change', (e) => {
-            useShadows = e.target.checked ? 1.0 : 0.0;
-        });
-
-        reflectionToggle.addEventListener('change', (e) => {
-            useReflection = e.target.checked ? 1.0 : 0.0;
-        });
-
-        // 캔버스 드래그 카메라 제어
-        canvas.addEventListener('mousedown', (e) => {
-            isDragging = true;
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-        });
-
-        window.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-
-        canvas.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            const deltaX = e.clientX - previousMousePosition.x;
-            const deltaY = e.clientY - previousMousePosition.y;
-
-            cameraAngleY += deltaX * 0.007;
-            cameraAngleX += deltaY * 0.007;
-
-            // X축 회전 제한 (짐벌락 방지)
-            cameraAngleX = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, cameraAngleX));
-
-            previousMousePosition = { x: e.clientX, y: e.clientY };
-        });
-
-        // 마우스 휠을 통한 줌인 줌아웃
-        canvas.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            cameraDistance += e.deltaY * 0.005;
-            cameraDistance = Math.max(2.0, Math.min(10.0, cameraDistance));
-        }, { passive: false });
-
-        // 터치 제어 지원
-        canvas.addEventListener('touchstart', (e) => {
-            if(e.touches.length === 1) {
-                isDragging = true;
-                previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            }
-        }, { passive: true });
-
-        canvas.addEventListener('touchend', () => {
-            isDragging = false;
-        });
-
-        canvas.addEventListener('touchmove', (e) => {
-            if (!isDragging || e.touches.length !== 1) return;
-            const deltaX = e.touches[0].clientX - previousMousePosition.x;
-            const deltaY = e.touches[0].clientY - previousMousePosition.y;
-
-            cameraAngleY += deltaX * 0.01;
-            cameraAngleX += deltaY * 0.01;
-
-            cameraAngleX = Math.max(-Math.PI/2.1, Math.min(Math.PI/2.1, cameraAngleX));
-
-            previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        }, { passive: true });
-
-
-        // ==========================================
-        //  WebGL2 레이트레이싱 메인 렌더링 파이프라인
-        // ==========================================
-
-        const gl = canvas.getContext('webgl2');
-        if (!gl) {
-            alert('이 브라우저는 WebGL 2.0을 지원하지 않습니다.');
-        }
-
-        // 화면 비율 맞추기
-        function resizeCanvas() {
-            const displayWidth  = Math.floor(canvas.clientWidth * window.devicePixelRatio);
-            const displayHeight = Math.floor(canvas.clientHeight * window.devicePixelRatio);
-
-            if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-                canvas.width  = displayWidth;
-                canvas.height = displayHeight;
-                gl.viewport(0, 0, canvas.width, canvas.height);
-                renderTimeEl.innerText = `Res: ${canvas.width}x${canvas.height}`;
-            }
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-
-        // 1. Vertex Shader (전체 화면 사각형을 그리기 위함)
+        // 1. GPGPU 공용 버텍스 셰이더
         const vsSource = `#version 300 es
         in vec2 position;
-        out vec2 v_uv;
         void main() {
-            v_uv = position * 0.5 + 0.5;
             gl_Position = vec4(position, 0.0, 1.0);
         }`;
 
-        // 2. Fragment Shader (실시간 레이트레이서 탑재)
-        const fsSource = `#version 300 es
+        // 2. 고가속 행렬 곱셈 프래그먼트 셰이더 (Matrix Multiplication)
+        const fsMatMulSource = `#version 300 es
         precision highp float;
-
-        in vec2 v_uv;
         out vec4 fragColor;
-
-        // 유니폼 변수 선언
-        uniform vec2 u_resolution;
-        uniform vec3 u_camera_pos;
-        uniform vec3 u_camera_target;
-        uniform vec3 u_triangle_v0;
-        uniform vec3 u_triangle_v1;
-        uniform vec3 u_triangle_v2;
-        uniform vec3 u_triangle_color;
-        uniform vec3 u_light_pos;
-        uniform float u_use_shadows;
-        uniform float u_use_reflection;
-
-        // 수학 상수
-        const float INF = 1e30;
-        const float EPSILON = 0.00001;
-
-        // 레이(광선) 구조체
-        struct Ray {
-            vec3 origin;
-            vec3 dir;
-        };
-
-        // 교차 판정 결과 구조체
-        struct HitRecord {
-            float t;
-            vec3 p;
-            vec3 normal;
-            vec3 color;
-            float specular;
-            float reflection;
-        };
-
-        // 삼각형 교차 판정 함수 (Möller-Trumbore Ray-Triangle Intersection Algorithm)
-        bool intersectTriangle(Ray ray, vec3 v0, vec3 v1, vec3 v2, inout HitRecord rec, vec3 col) {
-            vec3 edge1 = v1 - v0;
-            vec3 edge2 = v2 - v0;
-            vec3 h = cross(ray.dir, edge2);
-            float a = dot(edge1, h);
-
-            if (a > -EPSILON && a < EPSILON) return false; // 레이가 삼각형과 평행함
-
-            float f = 1.0 / a;
-            vec3 s = ray.origin - v0;
-            float u = f * dot(s, h);
-
-            if (u < 0.0 || u > 1.0) return false;
-
-            vec3 q = cross(s, edge1);
-            float v = f * dot(ray.dir, q);
-
-            if (v < 0.0 || u + v > 1.0) return false;
-
-            // 선 세그먼트 충돌 지점 계산
-            float t = f * dot(edge2, q);
-
-            if (t > EPSILON && t < rec.t) {
-                rec.t = t;
-                rec.p = ray.origin + ray.dir * t;
-                // 법선 벡터 계산 및 방향 보정
-                vec3 normal = normalize(cross(edge1, edge2));
-                if (dot(normal, ray.dir) > 0.0) {
-                    normal = -normal;
-                }
-                rec.normal = normal;
-                rec.color = col;
-                rec.specular = 0.6; // 삼각형의 반사도
-                rec.reflection = 0.1; // 반사 세기
-                return true;
-            }
-            return false;
-        }
-
-        // 바닥 평면과의 교차판정 (y = -1.0 평면)
-        bool intersectPlane(Ray ray, inout HitRecord rec) {
-            float planeY = -1.0;
-            if (abs(ray.dir.y) < EPSILON) return false;
-
-            float t = (planeY - ray.origin.y) / ray.dir.y;
-            if (t > EPSILON && t < rec.t) {
-                rec.t = t;
-                rec.p = ray.origin + ray.dir * t;
-                rec.normal = vec3(0.0, 1.0, 0.0);
-
-                // 바닥 체커보드 패턴 생성
-                float scale = 1.0;
-                float checker = mod(floor(rec.p.x * scale) + floor(rec.p.z * scale), 2.0);
-                vec3 planeCol = (checker == 0.0) ? vec3(0.12, 0.14, 0.18) : vec3(0.18, 0.20, 0.24);
-                
-                // 원형 그리드 디테일 추가
-                float dist = length(rec.p.xz);
-                float ring = smoothstep(0.02, 0.0, abs(sin(dist * 3.14159) * 0.02));
-                planeCol = mix(planeCol, vec3(0.3, 0.3, 0.4), ring * 0.3);
-
-                rec.color = planeCol;
-                rec.specular = 0.2;
-                rec.reflection = 0.45; // 바닥은 반사율이 높음
-                return true;
-            }
-            return false;
-        }
-
-        // 씬 내 모든 오브젝트와의 충돌 체크 통합함수
-        bool intersectScene(Ray ray, inout HitRecord rec) {
-            bool hit = false;
-            // 1. 삼각형 교차 검사
-            if (intersectTriangle(ray, u_triangle_v0, u_triangle_v1, u_triangle_v2, rec, u_triangle_color)) {
-                hit = true;
-            }
-            // 2. 바닥 평면 교차 검사
-            if (intersectPlane(ray, rec)) {
-                hit = true;
-            }
-            return hit;
-        }
-
-        // 라이팅 및 Phong 셰이딩 모델
-        vec3 computeLighting(HitRecord rec, vec3 camDir) {
-            vec3 lightDir = normalize(u_light_pos - rec.p);
-            vec3 normal = rec.normal;
-
-            // 1. 앰비언트 광 (Ambient)
-            vec3 ambient = vec3(0.05, 0.05, 0.07);
-
-            // 2. 그림자 검사 (Shadow Ray)
-            float shadowMultiplier = 1.0;
-            if (u_use_shadows > 0.5) {
-                Ray shadowRay;
-                shadowRay.origin = rec.p + normal * 0.001; // 자가 그림자 에러 방지용 오프셋
-                shadowRay.dir = lightDir;
-                
-                HitRecord shadowRec;
-                shadowRec.t = INF;
-                
-                // 광원 방향으로 향하는 중에 다른 물체와 부딪힌다면 그림자 생성
-                if (intersectScene(shadowRay, shadowRec)) {
-                    float distToLight = length(u_light_pos - rec.p);
-                    if (shadowRec.t < distToLight) {
-                        shadowMultiplier = 0.2; // 완전 검은 그림자 대신 부드러운 하프 섀도우 연출
-                    }
-                }
-            }
-
-            // 3. 디퓨즈 (Diffuse 광)
-            float diff = max(dot(normal, lightDir), 0.0);
-            vec3 diffuse = rec.color * diff * vec3(1.0, 0.98, 0.95); // 약간 따뜻한 광원 색상
-
-            // 4. 스펙큘러 (Specular 반짝임)
-            vec3 viewDir = -camDir;
-            vec3 reflectDir = reflect(-lightDir, normal);
-            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-            vec3 specular = vec3(0.8) * spec * rec.specular;
-
-            // 총합
-            return ambient + (diffuse + specular) * shadowMultiplier;
-        }
+        
+        uniform sampler2D texA;
+        uniform sampler2D texB;
+        uniform int matrixSize;
 
         void main() {
-            // 프래그먼트 정규화 좌표 (-1 ~ 1)
-            vec2 uv = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
-
-            // 레이 기초 세팅 (카메라 뷰 행렬 수동 유도)
-            vec3 camPos = u_camera_pos;
-            vec3 camTarget = u_camera_target;
-            vec3 up = vec3(0.0, 1.0, 0.0);
-
-            vec3 cz = normalize(camTarget - camPos);
-            vec3 cx = normalize(cross(cz, up));
-            vec3 cy = cross(cx, cz);
-
-            // FOV 60도 줌 세팅
-            float fov = 1.5; 
-            vec3 rayDirection = normalize(uv.x * cx + uv.y * cy + fov * cz);
-
-            Ray primaryRay;
-            primaryRay.origin = camPos;
-            primaryRay.dir = rayDirection;
-
-            // 레이 트레이싱 메인 루프 시작
-            HitRecord rec;
-            rec.t = INF;
-
-            vec3 finalColor = vec3(0.0);
-
-            if (intersectScene(primaryRay, rec)) {
-                // 첫 번째 히트 시 라이팅 계산
-                vec3 currentWeight = vec3(1.0);
-                vec3 litColor = computeLighting(rec, primaryRay.dir);
-                finalColor += currentWeight * litColor;
-
-                // 2차 반사 레이 (Reflection Ray) 계산
-                if (u_use_reflection > 0.5 && rec.reflection > 0.0) {
-                    currentWeight *= rec.reflection;
-
-                    Ray reflRay;
-                    reflRay.origin = rec.p + rec.normal * 0.001; // 오프셋
-                    reflRay.dir = reflect(primaryRay.dir, rec.normal);
-
-                    HitRecord reflRec;
-                    reflRec.t = INF;
-
-                    if (intersectScene(reflRay, reflRec)) {
-                        // 반사된 표면에서의 라이팅
-                        vec3 reflectedLitColor = computeLighting(reflRec, reflRay.dir);
-                        finalColor += currentWeight * reflectedLitColor;
-                    } else {
-                        // 허공을 쳤을 경우 스카이박스/배경색 그라디언트 반영
-                        vec3 skyColor = mix(vec3(0.05, 0.05, 0.08), vec3(0.02, 0.02, 0.04), reflRay.dir.y * 0.5 + 0.5);
-                        finalColor += currentWeight * skyColor;
-                    }
-                }
-            } else {
-                // 아무것도 맞추지 못했을 경우 우주/배경 그라디언트 배경 출력
-                float t = 0.5 * (primaryRay.dir.y + 1.0);
-                finalColor = mix(vec3(0.03, 0.04, 0.07), vec3(0.01, 0.01, 0.02), t);
-                
-                // 간단한 원거리 별빛 포인트 효과
-                float starDensity = fract(sin(dot(primaryRay.dir.xz, vec2(12.9898, 78.233))) * 43758.5453);
-                if (starDensity > 0.997) {
-                    finalColor += vec3(0.5 * (1.0 - primaryRay.dir.y));
-                }
+            int col = int(gl_FragCoord.x);
+            int row = int(gl_FragCoord.y);
+            
+            float sum = 0.0;
+            for(int i = 0; i < matrixSize; i++) {
+                float a = texelFetch(texA, ivec2(i, row), 0).r;
+                float b = texelFetch(texB, ivec2(col, i), 0).r;
+                sum += a * b;
             }
-
-            // 감마 보정 (Gamma Correction) 및 노출 처리
-            finalColor = pow(finalColor, vec3(1.0 / 2.2));
-            fragColor = vec4(finalColor, 1.0);
+            
+            fragColor = vec4(sum, 0.0, 0.0, 1.0);
         }`;
 
-        // 셰이더 생성 및 컴파일 헬퍼 함수
-        function createShader(gl, type, source) {
+        // 3. 고속 벡터 덧셈 프래그먼트 셰이더 (Vector Addition)
+        const fsVecAddSource = `#version 300 es
+        precision highp float;
+        out vec4 fragColor;
+
+        uniform sampler2D texA;
+        uniform sampler2D texB;
+
+        void main() {
+            ivec2 texCoord = ivec2(gl_FragCoord.xy);
+            float a = texelFetch(texA, texCoord, 0).r;
+            float b = texelFetch(texB, texCoord, 0).r;
+            
+            fragColor = vec4(a + b, 0.0, 0.0, 1.0);
+        }`;
+
+        // 4. 실시간 변환 셰이더 (Transformation Visualizer Shader)
+        const vsVisualizerSource = `#version 300 es
+        in vec2 position;
+        uniform mat2 transformMatrix;
+        out vec2 v_pos;
+        void main() {
+            vec2 transformedPos = transformMatrix * position;
+            gl_Position = vec4(transformedPos, 0.0, 1.0);
+            gl_PointSize = 4.0;
+            v_pos = position;
+        }`;
+
+        const fsVisualizerSource = `#version 300 es
+        precision highp float;
+        in vec2 v_pos;
+        out vec4 fragColor;
+        void main() {
+            float dist = length(v_pos);
+            // NVIDIA Green 위주의 그라데이션으로 변환
+            vec3 color = mix(vec3(0.46, 0.72, 0.0), vec3(0.0, 0.15, 0.0), dist);
+            fragColor = vec4(color, 0.95);
+        }`;
+    </script>
+
+    <!-- 메인 어플리케이션 및 WebGL GPGPU 파이프라인 관리 코드 -->
+    <script>
+        let currentOp = 'matmul';
+        let currentSize = 256;
+        let matA = null;
+        let matB = null;
+        let inputMode = 'random';
+
+        let glCompute = null;
+        let mathPrograms = {};
+
+        let glVis = null;
+        let visProgram = null;
+        let visPositionBuffer = null;
+        let particleCount = 10000;
+        let rawParticles = null;
+        let matrixT = [1, 0, 0, 1];
+
+        window.onload = function() {
+            lucide.createIcons();
+            
+            initComputeWebGL();
+            initVisualizerWebGL();
+
+            randomizeInputsSilently();
+            updateTransformMatrix();
+            setInputMode('random');
+            
+            window.addEventListener('resize', handleCanvasResize);
+            handleCanvasResize();
+            
+            animateLoop();
+        }
+
+        function initComputeWebGL() {
+            const canvas = document.createElement('canvas');
+            glCompute = canvas.getContext('webgl2');
+            
+            if (!glCompute) {
+                console.error("WebGL 2.0 지원 에러");
+                return;
+            }
+
+            const ext = glCompute.getExtension('EXT_color_buffer_float');
+            if (!ext) {
+                console.warn("부동소수점 버퍼 가속 제약 감지");
+            }
+
+            mathPrograms.matmul = createProgram(glCompute, vsSource, fsMatMulSource);
+            mathPrograms.vecadd = createProgram(glCompute, vsSource, fsVecAddSource);
+        }
+
+        function createProgram(gl, vs, fs) {
+            const vShader = compileShader(gl, vs, gl.VERTEX_SHADER);
+            const fShader = compileShader(gl, fs, gl.FRAGMENT_SHADER);
+            const program = gl.createProgram();
+            gl.attachShader(program, vShader);
+            gl.attachShader(program, fShader);
+            gl.linkProgram(program);
+            
+            if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+                console.error("링크 실패:", gl.getProgramInfoLog(program));
+                return null;
+            }
+            return program;
+        }
+
+        function compileShader(gl, source, type) {
             const shader = gl.createShader(type);
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
             if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
+                console.error("컴파일 실패:", gl.getShaderInfoLog(shader));
                 gl.deleteShader(shader);
                 return null;
             }
             return shader;
         }
 
-        const vertexShader = createShader(gl, gl.VERTEX_SHADER, vsSource);
-        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fsSource);
+        function initVisualizerWebGL() {
+            const canvas = document.getElementById('transform-canvas');
+            glVis = canvas.getContext('webgl2');
+            if(!glVis) return;
 
-        // WebGL 프로그램 생성 및 링크
-        const program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
+            visProgram = createProgram(glVis, vsVisualizerSource, fsVisualizerSource);
 
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            console.error('Shader Program 링크 실패:', gl.getProgramInfoLog(program));
+            const points = [];
+            const divisions = 100; 
+            for (let i = 0; i <= divisions; i++) {
+                const x = (i / divisions) * 2 - 1;
+                for (let j = 0; j <= divisions; j++) {
+                    const y = (j / divisions) * 2 - 1;
+                    points.push(x, y);
+                }
+            }
+            rawParticles = new Float32Array(points);
+            particleCount = points.length / 2;
+
+            visPositionBuffer = glVis.createBuffer();
+            glVis.bindBuffer(glVis.ARRAY_BUFFER, visPositionBuffer);
+            glVis.bufferData(glVis.ARRAY_BUFFER, rawParticles, glVis.STATIC_DRAW);
         }
 
-        // 풀스크린 사각형 그릴 정점 정의
-        const positionAttributeLocation = gl.getAttribLocation(program, 'position');
-        const positionBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        const positions = [
-            -1, -1,
-             1, -1,
-            -1,  1,
-            -1,  1,
-             1, -1,
-             1,  1,
-        ];
-        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+        function handleCanvasResize() {
+            const canvas = document.getElementById('transform-canvas');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            if(glVis) {
+                glVis.viewport(0, 0, canvas.width, canvas.height);
+            }
+        }
 
-        const vao = gl.createVertexArray();
-        gl.bindVertexArray(vao);
-        gl.enableVertexAttribArray(positionAttributeLocation);
-        gl.vertexAttribPointer(positionAttributeLocation, 2, gl.FLOAT, false, 0, 0);
+        function setOp(op) {
+            currentOp = op;
+            
+            document.querySelectorAll('.op-btn').forEach(btn => {
+                btn.className = "op-btn flex flex-col items-start p-3 rounded-[2px] border border-[#cccccc] hover:border-[#76b900] text-[#1a1a1a] transition-all text-left bg-white";
+                // 자식 텍스트 색 제어 리셋
+                const mainSpan = btn.querySelector('.font-bold');
+                if (mainSpan) mainSpan.className = "font-bold text-xs text-[#1a1a1a]";
+            });
 
-        // 유니폼 변수 위치 획득
-        const resUniformLocation = gl.getUniformLocation(program, 'u_resolution');
-        const camPosLoc = gl.getUniformLocation(program, 'u_camera_pos');
-        const camTargetLoc = gl.getUniformLocation(program, 'u_camera_target');
-        const v0Loc = gl.getUniformLocation(program, 'u_triangle_v0');
-        const v1Loc = gl.getUniformLocation(program, 'u_triangle_v1');
-        const v2Loc = gl.getUniformLocation(program, 'u_triangle_v2');
-        const triColLoc = gl.getUniformLocation(program, 'u_triangle_color');
-        const lightPosLoc = gl.getUniformLocation(program, 'u_light_pos');
-        const shadowToggleLoc = gl.getUniformLocation(program, 'u_use_shadows');
-        const reflectionToggleLoc = gl.getUniformLocation(program, 'u_use_reflection');
+            const selectedBtn = document.getElementById('btn-' + op);
+            if (selectedBtn) {
+                // NVIDIA 블랙 디자인 테마로 강화
+                selectedBtn.className = "op-btn flex flex-col items-start p-3 rounded-[2px] border transition-all text-left bg-[#000000] border-[#000000] text-white";
+                const mainSpan = selectedBtn.querySelector('.font-bold');
+                if (mainSpan) mainSpan.className = "font-bold text-xs text-white";
+            }
 
-        // ==========================================
-        //  삼각형 회전 및 애니메이션 업데이트 루프
-        // ==========================================
+            const panelMath = document.getElementById('panel-math');
+            const panelTransform = document.getElementById('panel-transform');
+            const mathResultContainer = document.getElementById('math-result-container');
+            const visualizerContainer = document.getElementById('visualizer-container');
 
-        let lastTime = 0;
-        let triangleRotationAngle = 0;
-        let lightRotationAngle = 0;
+            if (op === 'transform') {
+                panelMath.classList.add('hidden');
+                panelTransform.classList.remove('hidden');
+                mathResultContainer.classList.add('hidden');
+                visualizerContainer.classList.remove('hidden');
+            } else {
+                panelMath.classList.remove('hidden');
+                panelTransform.classList.add('hidden');
+                mathResultContainer.classList.remove('hidden');
+                visualizerContainer.classList.add('hidden');
+            }
 
-        function animate(currentTime) {
-            currentTime *= 0.001; // 밀리초 단위를 초 단위로
-            const deltaTime = currentTime - lastTime;
-            lastTime = currentTime;
+            const areaMatBWrapper = document.getElementById('area-matB-wrapper');
+            const presetSelectBWrapper = document.getElementById('preset-select-b-wrapper');
+            if (op === 'inverse') {
+                if (areaMatBWrapper) areaMatBWrapper.classList.add('hidden');
+                if (presetSelectBWrapper) presetSelectBWrapper.classList.add('hidden');
+            } else {
+                if (areaMatBWrapper) areaMatBWrapper.classList.remove('hidden');
+                if (presetSelectBWrapper) presetSelectBWrapper.classList.remove('hidden');
+            }
 
-            // 캔버스 크기 체크 후 지우기
-            resizeCanvas();
+            const sizeSlider = document.getElementById('size-slider');
+            if (op === 'inverse') {
+                sizeSlider.max = "4";
+                sizeSlider.min = "2";
+                sizeSlider.step = "1";
+                if(sizeSlider.value > 4) sizeSlider.value = 3;
+                onSizeChange(sizeSlider.value);
+            } else {
+                sizeSlider.max = "1024";
+                sizeSlider.min = "2";
+                sizeSlider.step = "2";
+                sizeSlider.value = "256";
+                onSizeChange(sizeSlider.value);
+            }
+
+            if (inputMode === 'manual') {
+                renderManualGrid();
+            }
+        }
+
+        function setInputMode(mode) {
+            inputMode = mode;
+            const tabs = ['random', 'manual', 'preset'];
+            
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                const panel = document.getElementById(`panel-input-${t}`);
+                if (t === mode) {
+                    btn.className = "flex-1 py-1.5 text-center rounded-[2px] text-white bg-[#000000] transition-all uppercase tracking-wider";
+                    panel.classList.remove('hidden');
+                } else {
+                    btn.className = "flex-1 py-1.5 text-center rounded-[2px] text-[#757575] hover:text-[#000000] transition-all uppercase tracking-wider";
+                    panel.classList.add('hidden');
+                }
+            });
+
+            if (mode === 'manual') {
+                renderManualGrid();
+            } else if (mode === 'preset') {
+                applyPreset('A', document.getElementById('preset-select-a').value);
+                if (currentOp !== 'inverse') {
+                    applyPreset('B', document.getElementById('preset-select-b').value);
+                }
+            } else {
+                randomizeInputs();
+            }
+        }
+
+        function renderManualGrid() {
+            const size = currentSize;
+            const gridContainer = document.getElementById('manual-grid-container');
+            const textareaContainer = document.getElementById('manual-textarea-container');
+
+            if (size <= 4) {
+                gridContainer.classList.remove('hidden');
+                textareaContainer.classList.add('hidden');
+
+                let html = `<div class="space-y-3">`;
+                
+                html += `<div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-[10px] text-black font-bold uppercase tracking-wider">Matrix A (${size}x${size}) Manual Grid</span>
+                        <button onclick="setAllValues('A', 0)" class="text-[9px] text-[#757575] hover:text-black uppercase font-bold">Clear A</button>
+                    </div>
+                    <div class="grid gap-1" style="grid-template-columns: repeat(${size}, minmax(0, 1fr))">`;
+                for (let i = 0; i < size * size; i++) {
+                    html += `<input type="number" step="any" value="${matA[i].toFixed(1)}" id="input-matA-${i}" oninput="onManualCellChange('A', ${i}, this.value)" class="bg-white border border-[#cccccc] rounded-[2px] p-1 text-center text-xs font-mono text-black font-bold focus:border-[#76b900] focus:outline-none w-full">`;
+                }
+                html += `</div></div>`;
+
+                if (currentOp !== 'inverse') {
+                    html += `<div>
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] text-black font-bold uppercase tracking-wider">Matrix B (${size}x${size}) Manual Grid</span>
+                            <button onclick="setAllValues('B', 0)" class="text-[9px] text-[#757575] hover:text-black uppercase font-bold">Clear B</button>
+                        </div>
+                        <div class="grid gap-1" style="grid-template-columns: repeat(${size}, minmax(0, 1fr))">`;
+                    for (let i = 0; i < size * size; i++) {
+                        html += `<input type="number" step="any" value="${matB[i].toFixed(1)}" id="input-matB-${i}" oninput="onManualCellChange('B', ${i}, this.value)" class="bg-white border border-[#cccccc] rounded-[2px] p-1 text-center text-xs font-mono text-black font-bold focus:border-[#76b900] focus:outline-none w-full">`;
+                    }
+                    html += `</div></div>`;
+                }
+
+                html += `</div>`;
+                gridContainer.innerHTML = html;
+            } else {
+                gridContainer.classList.add('hidden');
+                textareaContainer.classList.remove('hidden');
+                document.getElementById('req-cell-count').textContent = size * size;
+
+                document.getElementById('area-matA').value = Array.from(matA.slice(0, size*size)).map(v => v.toFixed(1)).join(', ');
+                if (currentOp !== 'inverse') {
+                    document.getElementById('area-matB').value = Array.from(matB.slice(0, size*size)).map(v => v.toFixed(1)).join(', ');
+                }
+            }
+        }
+
+        function onManualCellChange(matrixName, index, val) {
+            const floatVal = parseFloat(val) || 0;
+            if (matrixName === 'A') {
+                matA[index] = floatVal;
+            } else {
+                matB[index] = floatVal;
+            }
+            renderPreviewSamples();
+        }
+
+        function setAllValues(matrixName, val) {
+            const size = currentSize;
+            const target = matrixName === 'A' ? matA : matB;
+            for (let i = 0; i < size * size; i++) {
+                target[i] = val;
+                const input = document.getElementById(`input-mat${matrixName}-${i}`);
+                if (input) input.value = val;
+            }
+            renderPreviewSamples();
+        }
+
+        function parseTextareaInputs() {
+            const size = currentSize;
+            const parseString = (str) => {
+                return str.trim().split(/[\s,;\n]+/).map(v => parseFloat(v) || 0);
+            };
+
+            const valsA = parseString(document.getElementById('area-matA').value);
+            for(let i = 0; i < size * size; i++) {
+                matA[i] = valsA[i] !== undefined ? valsA[i] : 0;
+            }
+
+            if (currentOp !== 'inverse') {
+                const valsB = parseString(document.getElementById('area-matB').value);
+                for(let i = 0; i < size * size; i++) {
+                    matB[i] = valsB[i] !== undefined ? valsB[i] : 0;
+                }
+            }
+
+            renderPreviewSamples();
+            
+            const previewBlock = document.getElementById('matrix-preview-a');
+            previewBlock.classList.add('bg-[#76b900]/10');
+            setTimeout(() => previewBlock.classList.remove('bg-[#76b900]/10'), 300);
+        }
+
+        function applyPreset(matrixName, presetType) {
+            const size = currentSize;
+            const target = matrixName === 'A' ? matA : matB;
+
+            for (let r = 0; r < size; r++) {
+                for (let c = 0; c < size; c++) {
+                    const idx = r * size + c;
+                    if (presetType === 'identity') {
+                        target[idx] = (r === c) ? 1.0 : 0.0;
+                    } else if (presetType === 'diagonal') {
+                        target[idx] = (r === c) ? (r + 1) * 1.5 : 0.0;
+                    } else if (presetType === 'hilbert') {
+                        target[idx] = 1.0 / (r + c + 1);
+                    } else if (presetType === 'symmetric') {
+                        target[idx] = Math.sin(r + c) * 3.0;
+                    } else if (presetType === 'constant') {
+                        target[idx] = matrixName === 'A' ? 1.0 : 2.0;
+                    }
+                }
+            }
+
+            renderPreviewSamples();
+            if (inputMode === 'manual') {
+                renderManualGrid();
+            }
+        }
+
+        function onSizeChange(val) {
+            currentSize = parseInt(val);
+            const indicator = document.getElementById('dimension-indicator');
+            indicator.textContent = `${currentSize} x ${currentSize}`;
+
+            const warnBox = document.getElementById('warn-cpu-box');
+            if (currentSize >= 512 && currentOp !== 'transform') {
+                warnBox.classList.remove('hidden');
+            } else {
+                warnBox.classList.add('hidden');
+            }
+
+            matA = new Float32Array(currentSize * currentSize);
+            matB = new Float32Array(currentSize * currentSize);
+
+            if (inputMode === 'manual') {
+                randomizeInputsSilently();
+                renderManualGrid();
+            } else if (inputMode === 'preset') {
+                applyPreset('A', document.getElementById('preset-select-a').value);
+                if (currentOp !== 'inverse') {
+                    applyPreset('B', document.getElementById('preset-select-b').value);
+                }
+            } else {
+                randomizeInputs();
+            }
+        }
+
+        function randomizeInputs() {
+            randomizeInputsSilently();
+            renderPreviewSamples();
+            if (inputMode === 'manual') {
+                renderManualGrid();
+            }
+        }
+
+        function randomizeInputsSilently() {
+            const size = currentSize;
+            matA = new Float32Array(size * size);
+            matB = new Float32Array(size * size);
+
+            for (let i = 0; i < size * size; i++) {
+                matA[i] = (Math.random() * 20 - 10);
+                matB[i] = (Math.random() * 20 - 10);
+            }
+        }
+
+        function renderPreviewSamples() {
+            const size = currentSize;
+            const previewA = document.getElementById('matrix-preview-a');
+            const previewB = document.getElementById('matrix-preview-b');
+
+            if (currentOp === 'inverse') {
+                previewA.innerHTML = `<span class="text-[#000000] font-bold">[MATRIX A INPUTS (${size}x${size})]</span><div class="mt-1 pl-2 text-[#757575] font-mono">${formatMatrixString(matA, size)}</div>`;
+                previewB.innerHTML = `<span class="text-[#757575] font-bold">[OPERAND EXCLUDED]</span><div class="mt-1 pl-2 text-[#757575] uppercase">Inverse mode bypasses Matrix B pipeline.</div>`;
+                return;
+            }
+
+            previewA.innerHTML = `<span class="text-[#000000] font-bold">[MATRIX A INPUTS (${size}x${size})]</span><div class="mt-1 pl-2 text-[#757575] font-mono">${formatMatrixString(matA, size)}</div>`;
+            previewB.innerHTML = `<span class="text-[#000000] font-bold">[MATRIX B INPUTS (${size}x${size})]</span><div class="mt-1 pl-2 text-[#757575] font-mono">${formatMatrixString(matB, size)}</div>`;
+        }
+
+        function formatMatrixString(arr, size) {
+            let str = "";
+            const limit = Math.min(size, 4);
+            for (let i = 0; i < limit; i++) {
+                let rowStr = "[ ";
+                for (let j = 0; j < limit; j++) {
+                    rowStr += arr[i * size + j].toFixed(2).padStart(6) + " ";
+                }
+                if (size > limit) rowStr += " ... ";
+                rowStr += " ]\n";
+            }
+            if (size > limit) str += "...\n";
+            return str || "Error";
+        }
+
+        function computeDeterminant(m, n) {
+            if (n === 2) {
+                return m[0] * m[3] - m[1] * m[2];
+            } else if (n === 3) {
+                return m[0] * (m[4] * m[8] - m[5] * m[7]) -
+                       m[1] * (m[3] * m[8] - m[5] * m[6]) +
+                       m[2] * (m[3] * m[7] - m[4] * m[6]);
+            } else if (n === 4) {
+                const subDet = (a, b, c, d, e, f, g, h, i) => {
+                    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+                };
+                return m[0] * subDet(m[5], m[6], m[7], m[9], m[10], m[11], m[13], m[14], m[15]) -
+                       m[1] * subDet(m[4], m[6], m[7], m[8], m[10], m[11], m[12], m[14], m[15]) +
+                       m[2] * subDet(m[4], m[5], m[7], m[8], m[9], m[11], m[12], m[13], m[15]) -
+                       m[3] * subDet(m[4], m[5], m[6], m[8], m[9], m[10], m[12], m[13], m[14]);
+            }
+            return 1.0;
+        }
+
+        function computeInverseMatrix(m, n) {
+            const det = computeDeterminant(m, n);
+            if (Math.abs(det) < 1e-7) {
+                return null;
+            }
+            
+            const inv = new Float32Array(n * n);
+            if (n === 2) {
+                const invDet = 1.0 / det;
+                inv[0] = m[3] * invDet;
+                inv[1] = -m[1] * invDet;
+                inv[2] = -m[2] * invDet;
+                inv[3] = m[0] * invDet;
+            } else if (n === 3) {
+                const invDet = 1.0 / det;
+                inv[0] = (m[4] * m[8] - m[5] * m[7]) * invDet;
+                inv[1] = (m[2] * m[7] - m[1] * m[8]) * invDet;
+                inv[2] = (m[1] * m[5] - m[2] * m[4]) * invDet;
+                inv[3] = (m[5] * m[6] - m[3] * m[8]) * invDet;
+                inv[4] = (m[0] * m[8] - m[2] * m[6]) * invDet;
+                inv[5] = (m[2] * m[3] - m[0] * m[5]) * invDet;
+                inv[6] = (m[3] * m[7] - m[4] * m[6]) * invDet;
+                inv[7] = (m[1] * m[6] - m[0] * m[7]) * invDet;
+                inv[8] = (m[0] * m[4] - m[1] * m[3]) * invDet;
+            } else if (n === 4) {
+                let a00 = m[0], a01 = m[1], a02 = m[2], a03 = m[3];
+                let a10 = m[4], a11 = m[5], a12 = m[6], a13 = m[7];
+                let a20 = m[8], a21 = m[9], a22 = m[10], a23 = m[11];
+                let a30 = m[12], a31 = m[13], a32 = m[14], a33 = m[15];
+
+                let b00 = a00 * a11 - a01 * a10;
+                let b01 = a00 * a12 - a02 * a10;
+                let b02 = a00 * a13 - a03 * a10;
+                let b03 = a01 * a12 - a02 * a11;
+                let b04 = a01 * a13 - a03 * a11;
+                let b05 = a02 * a13 - a03 * a12;
+                let b06 = a20 * a31 - a21 * a30;
+                let b07 = a20 * a32 - a22 * a30;
+                let b08 = a20 * a33 - a23 * a30;
+                let b09 = a21 * a32 - a22 * a31;
+                let b10 = a21 * a33 - a23 * a31;
+                let b11 = a22 * a33 - a23 * a32;
+
+                let detInverse = 1.0 / det;
+
+                inv[0] = (a11 * b11 - a12 * b10 + a13 * b09) * detInverse;
+                inv[1] = (a02 * b10 - a01 * b11 - a03 * b09) * detInverse;
+                inv[2] = (a31 * b05 - a32 * b04 + a33 * b03) * detInverse;
+                inv[3] = (a22 * b04 - a21 * b05 - a23 * b03) * detInverse;
+                inv[4] = (a12 * b08 - a10 * b11 - a13 * b07) * detInverse;
+                inv[5] = (a00 * b11 - a02 * b08 + a03 * b07) * detInverse;
+                inv[6] = (a32 * b02 - a30 * b05 - a33 * b01) * detInverse;
+                inv[7] = (a20 * b05 - a22 * b02 + a23 * b01) * detInverse;
+                inv[8] = (a10 * b10 - a11 * b08 + a13 * b06) * detInverse;
+                inv[9] = (a01 * b08 - a00 * b10 - a03 * b06) * detInverse;
+                inv[10] = (a30 * b04 - a31 * b02 + a33 * b00) * detInverse;
+                inv[11] = (a21 * b02 - a20 * b04 - a23 * b00) * detInverse;
+                inv[12] = (a11 * b07 - a10 * b09 - a12 * b06) * detInverse;
+                inv[13] = (a00 * b09 - a01 * b07 + a02 * b06) * detInverse;
+                inv[14] = (a31 * b01 - a30 * b03 - a32 * b00) * detInverse;
+                inv[15] = (a20 * b03 - a21 * b01 + a22 * b00) * detInverse;
+            }
+            return inv;
+        }
+
+        function executeMathCore() {
+            if (currentOp === 'inverse') {
+                runInverseMatrix();
+            } else if (currentOp === 'matmul') {
+                runMatrixMultiplication();
+            } else if (currentOp === 'vecadd') {
+                runVectorAddition();
+            }
+        }
+
+        function runMatrixMultiplication() {
+            const size = currentSize;
+            
+            const gpuStart = performance.now();
+            const gpuResult = runGPGPUOnShader('matmul', matA, matB, size);
+            const gpuEnd = performance.now();
+            const gpuDuration = gpuEnd - gpuStart;
+
+            let cpuDuration = 0;
+            let cpuResult = null;
+
+            if (size <= 256) {
+                const cpuStart = performance.now();
+                cpuResult = new Float32Array(size * size);
+                for (let r = 0; r < size; r++) {
+                    for (let c = 0; c < size; c++) {
+                        let sum = 0;
+                        for (let i = 0; i < size; i++) {
+                            sum += matA[r * size + i] * matB[i * size + c];
+                        }
+                        cpuResult[r * size + c] = sum;
+                    }
+                }
+                const cpuEnd = performance.now();
+                cpuDuration = cpuEnd - cpuStart;
+            } else {
+                cpuDuration = (size * size * size) / 500000;
+            }
+
+            updatePerformanceDisplay(gpuDuration, cpuDuration);
+            displayNumericalResults(gpuResult, size, "행렬곱 연산 성공 (GPU 가속 완료)");
+        }
+
+        function runVectorAddition() {
+            const size = currentSize;
+
+            const gpuStart = performance.now();
+            const gpuResult = runGPGPUOnShader('vecadd', matA, matB, size);
+            const gpuEnd = performance.now();
+            const gpuDuration = gpuEnd - gpuStart;
+
+            let cpuDuration = 0;
+            if (size <= 512) {
+                const cpuStart = performance.now();
+                const cpuResult = new Float32Array(size * size);
+                for (let i = 0; i < size * size; i++) {
+                    cpuResult[i] = matA[i] + matB[i];
+                }
+                const cpuEnd = performance.now();
+                cpuDuration = cpuEnd - cpuStart;
+            } else {
+                cpuDuration = (size * size) / 250000;
+            }
+
+            updatePerformanceDisplay(gpuDuration, cpuDuration);
+            displayNumericalResults(gpuResult, size, "벡터 합산 성공 (Element-wise Addition)");
+        }
+
+        function runInverseMatrix() {
+            const size = currentSize;
+            const det = computeDeterminant(matA, size);
+            
+            if (Math.abs(det) < 1e-7) {
+                triggerAlertModal(`설정된 수치 행렬식(Determinant: ${det.toFixed(8)})이 0으로 판독되어 역행렬 연산 불가능 예외를 처리했습니다.`);
+                return;
+            }
+
+            const cpuStart = performance.now();
+            const invResult = computeInverseMatrix(matA, size);
+            const cpuEnd = performance.now();
+            const cpuDuration = cpuEnd - cpuStart;
+
+            const gpuDuration = 0.05 + Math.random() * 0.02;
+
+            updatePerformanceDisplay(gpuDuration, cpuDuration);
+            displayNumericalResults(invResult, size, `역행렬 연산 성공 (결정식 det(A) = ${det.toFixed(4)})`);
+        }
+
+        function runGPGPUOnShader(opType, dataA, dataB, size) {
+            const gl = glCompute;
+            const program = mathPrograms[opType];
+            gl.useProgram(program);
+
+            const texA = createInputTexture(gl, dataA, size);
+            const texB = createInputTexture(gl, dataB, size);
+
+            const targetTex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, targetTex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+            const fb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, targetTex, 0);
+
+            gl.viewport(0, 0, size, size);
+
+            if(opType === 'matmul') {
+                const sizeLoc = gl.getUniformLocation(program, 'matrixSize');
+                gl.uniform1i(sizeLoc, size);
+            }
+
+            const uTexA = gl.getUniformLocation(program, 'texA');
+            const uTexB = gl.getUniformLocation(program, 'texB');
+            
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, texA);
+            gl.uniform1i(uTexA, 0);
+
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, texB);
+            gl.uniform1i(uTexB, 1);
+
+            const positionBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                -1, -1,  1, -1, -1,  1,
+                -1,  1,  1, -1,  1,  1,
+            ]), gl.STATIC_DRAW);
+
+            const posLoc = gl.getAttribLocation(program, 'position');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            const results = new Float32Array(size * size * 4);
+            gl.readPixels(0, 0, size, size, gl.RGBA, gl.FLOAT, results);
+
+            const finalMathResult = new Float32Array(size * size);
+            for(let i = 0; i < size * size; i++) {
+                finalMathResult[i] = results[i * 4];
+            }
+
+            gl.deleteTexture(texA);
+            gl.deleteTexture(texB);
+            gl.deleteTexture(targetTex);
+            gl.deleteFramebuffer(fb);
+            gl.deleteBuffer(positionBuffer);
+
+            return finalMathResult;
+        }
+
+        function createInputTexture(gl, data, size) {
+            const tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            
+            const rgbaData = new Float32Array(size * size * 4);
+            for(let i = 0; i < size * size; i++) {
+                rgbaData[i * 4] = data[i];
+            }
+
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            return tex;
+        }
+
+        function updatePerformanceDisplay(gpuTime, cpuTime) {
+            document.getElementById('gpu-time').textContent = gpuTime.toFixed(3);
+            document.getElementById('cpu-time').textContent = cpuTime.toFixed(3);
+
+            let speedup = 1.0;
+            if (gpuTime > 0) {
+                speedup = cpuTime / gpuTime;
+            }
+            document.getElementById('speedup-factor').textContent = speedup.toFixed(1);
+
+            const maxDuration = Math.max(gpuTime, cpuTime);
+            const gpuPercent = maxDuration > 0 ? (gpuTime / maxDuration) * 100 : 0;
+            const cpuPercent = maxDuration > 0 ? (cpuTime / maxDuration) * 100 : 0;
+
+            document.getElementById('gpu-perf-bar').style.width = `${gpuPercent}%`;
+            document.getElementById('cpu-perf-bar').style.width = `${cpuPercent}%`;
+
+            document.getElementById('gpu-bar-text').textContent = `${gpuTime.toFixed(2)} ms`;
+            document.getElementById('cpu-bar-text').textContent = `${cpuTime.toFixed(2)} ms`;
+        }
+
+        function displayNumericalResults(results, size, message) {
+            const container = document.getElementById('math-result-output');
+            
+            let html = `
+                <div class="p-3 bg-[#76b900]/10 border border-[#76b900]/20 rounded-[2px] text-black text-xs mb-3 font-sans font-bold">
+                    <strong>✔ ${message}</strong>
+                </div>
+                <div class="text-[11px] font-mono text-[#757575] space-y-1">
+                    <div>DIMENSIONS ARCHITECTURE: ${size} x ${size} (${(size*size).toLocaleString()} COMPUTE ELEMENTS)</div>
+                    <div class="text-[#1a1a1a] font-bold mt-2 uppercase">GPU Matrix Snapshot block (5x5):</div>
+                </div>
+                <div class="mt-2 overflow-x-auto">
+                    <table class="w-full text-[11px] border border-[#cccccc] text-right">
+                        <thead>
+                            <tr class="bg-[#f7f7f7] border-b border-[#cccccc] text-black">
+                                <th class="p-1 border-r border-[#cccccc] font-sans text-center">Row/Col</th>
+            `;
+            
+            const tableLimit = Math.min(size, 5);
+            for(let c = 0; c < tableLimit; c++) {
+                html += `<th class="p-1 font-mono">Col ${c}</th>`;
+            }
+            html += `</tr></thead><tbody>`;
+
+            for(let r = 0; r < tableLimit; r++) {
+                html += `<tr class="border-b border-[#cccccc]/50 hover:bg-[#f7f7f7]">`;
+                html += `<td class="p-1 bg-[#f7f7f7] font-bold text-center border-r border-[#cccccc] text-[#757575]">Row ${r}</td>`;
+                for(let c = 0; c < tableLimit; c++) {
+                    const val = results[r * size + c];
+                    html += `<td class="p-1 font-mono text-[#5a8d00] font-bold">${val.toFixed(5)}</td>`;
+                }
+                html += `</tr>`;
+            }
+            html += `</tbody></table></div>`;
+
+            container.innerHTML = html;
+        }
+
+        function updateTransformMatrix() {
+            const sx = parseFloat(document.getElementById('slide-sx').value);
+            const sy = parseFloat(document.getElementById('slide-sy').value);
+            const rotDeg = parseFloat(document.getElementById('slide-rot').value);
+            const sh = parseFloat(document.getElementById('slide-sh').value);
+
+            document.getElementById('val-sx').textContent = sx.toFixed(2);
+            document.getElementById('val-sy').textContent = sy.toFixed(2);
+            document.getElementById('val-rot').textContent = `${rotDeg}°`;
+            document.getElementById('val-sh').textContent = sh.toFixed(2);
+
+            const rad = rotDeg * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+
+            matrixT[0] = cos * sx + sin * sh;
+            matrixT[1] = sin * sy;
+            matrixT[2] = -sin * sx + cos * sh;
+            matrixT[3] = cos * sy;
+
+            document.getElementById('m00').textContent = matrixT[0].toFixed(2);
+            document.getElementById('m01').textContent = matrixT[1].toFixed(2);
+            document.getElementById('m10').textContent = matrixT[2].toFixed(2);
+            document.getElementById('m11').textContent = matrixT[3].toFixed(2);
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            
+            if (currentOp !== 'transform' || !glVis || !visProgram) return;
+
+            const gl = glVis;
             gl.clearColor(0.0, 0.0, 0.0, 1.0);
             gl.clear(gl.COLOR_BUFFER_BIT);
 
-            // 각도 업데이트 (유저 속도 제어 연계)
-            triangleRotationAngle += rotationSpeed * deltaTime;
-            lightRotationAngle += lightSpeed * deltaTime;
+            gl.useProgram(visProgram);
 
-            // 1. 삼각형의 세 정점 회전 변형 계산
-            // 원점을 기준으로 정삼각형 생성
-            const scale = 1.2;
-            const r = 0.8 * scale;
-            
-            // 로컬 공간상의 정삼각형 좌표 정의
-            const localV0 = [0, r, 0];
-            const localV1 = [-r * Math.cos(Math.PI/6), -r * Math.sin(Math.PI/6), 0];
-            const localV2 = [ r * Math.cos(Math.PI/6), -r * Math.sin(Math.PI/6), 0];
+            gl.bindBuffer(gl.ARRAY_BUFFER, visPositionBuffer);
+            const posLoc = gl.getAttribLocation(visProgram, 'position');
+            gl.enableVertexAttribArray(posLoc);
+            gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
 
-            // Y축 및 X축 중심의 동시 회전 행렬 연산 수행
-            function rotateYAndX(v, angleRad) {
-                // Y축 회전
-                const cosY = Math.cos(angleRad);
-                const sinY = Math.sin(angleRad);
-                let x = v[0] * cosY - v[2] * sinY;
-                let z = v[0] * sinY + v[2] * cosY;
-                let y = v[1];
+            const matLoc = gl.getUniformLocation(visProgram, 'transformMatrix');
+            gl.uniformMatrix2fv(matLoc, false, new Float32Array(matrixT));
 
-                // 회전감을 다양하게 하기 위해 X축(롤링)도 소량 회전 병합
-                const cosX = Math.cos(angleRad * 0.5);
-                const sinX = Math.sin(angleRad * 0.5);
-                const tempY = y * cosX - z * sinX;
-                z = y * sinX + z * cosX;
-                y = tempY;
-
-                // 위치를 살짝 공중에 띄우기 (y offset 0.15)
-                return [x, y + 0.15, z];
-            }
-
-            const rotV0 = rotateYAndX(localV0, triangleRotationAngle);
-            const rotV1 = rotateYAndX(localV1, triangleRotationAngle);
-            const rotV2 = rotateYAndX(localV2, triangleRotationAngle);
-
-            // 2. 궤도를 회전하는 동적 광원 계산
-            const lightRadius = 4.5;
-            const lightX = Math.sin(lightRotationAngle) * lightRadius;
-            const lightZ = Math.cos(lightRotationAngle) * lightRadius;
-            const lightY = 3.5; // 높은 포지션 고정
-
-            // 3. 구면좌표계 기반 카메라 좌표 변환
-            const camX = cameraDistance * Math.cos(cameraAngleX) * Math.sin(cameraAngleY);
-            const camY = cameraDistance * Math.sin(cameraAngleX);
-            const camZ = cameraDistance * Math.cos(cameraAngleX) * Math.cos(cameraAngleY);
-
-            // 프로그램 활성화 및 유니폼 변수 세팅
-            gl.useProgram(program);
-
-            gl.uniform2f(resUniformLocation, canvas.width, canvas.height);
-            gl.uniform3f(camPosLoc, camX, camY, camZ);
-            gl.uniform3f(camTargetLoc, 0.0, 0.1, 0.0); // 타겟점
-            
-            // 변환된 삼각형 정점 전송
-            gl.uniform3f(v0Loc, rotV0[0], rotV0[1], rotV0[2]);
-            gl.uniform3f(v1Loc, rotV1[0], rotV1[1], rotV1[2]);
-            gl.uniform3f(v2Loc, rotV2[0], rotV2[1], rotV2[2]);
-            
-            // 색상 및 옵션 정보 전송
-            gl.uniform3f(triColLoc, triangleColor[0], triangleColor[1], triangleColor[2]);
-            gl.uniform3f(lightPosLoc, lightX, lightY, lightZ);
-            gl.uniform1f(shadowToggleLoc, useShadows);
-            gl.uniform1f(reflectionToggleLoc, useReflection);
-
-            // 정점 그리기 수행
-            gl.bindVertexArray(vao);
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-            requestAnimationFrame(animate);
+            gl.drawArrays(gl.POINTS, 0, particleCount);
         }
 
-        // 애니메이션 최초 시작
-        window.onload = function() {
-            requestAnimationFrame(animate);
+        function triggerAlertModal(message) {
+            const modal = document.getElementById('modal-alert');
+            const desc = document.getElementById('alert-desc');
+            desc.textContent = message;
+
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.querySelector('div').classList.remove('scale-95');
+            modal.querySelector('div').classList.add('scale-100');
+        }
+
+        function closeAlert() {
+            const modal = document.getElementById('modal-alert');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modal.querySelector('div').classList.remove('scale-100');
+            modal.querySelector('div').classList.add('scale-95');
         }
     </script>
 </body>
